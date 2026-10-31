@@ -227,7 +227,8 @@ dialog h2 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
 .wx-stats em { font-style: normal; font-size: 11px; color: var(--text-muted); line-height: 1.2; }
 .wx-stats .aq-good b { color: var(--success); }
 .wx-stats .aq-mod b { color: var(--warning); }
-.wx-stats .aq-bad b { color: var(--danger); }
+.wx-stats .aq-bad b, .wx-stats .aq-usg b, .wx-stats .aq-vbad b, .wx-stats .aq-haz b { color: var(--danger); }
+.wx-stats [data-action="poll-jump"] { cursor: pointer; }
 .radar-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .radar-btn[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
 .wx-h { font-size: 16px; font-weight: 600; margin: 16px 0 6px; }
@@ -251,3 +252,67 @@ dialog h2 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
 .report-grid button.sev-danger svg { color: var(--danger); }
 .report-grid button.sev-warning svg { color: var(--warning); }
 .report-grid button.sev-info svg { color: #1F6FB2; }
+
+/* ---------- Pollution index ---------- */
+.poll { scroll-margin-top: 12px; }
+.poll-card { border-radius: 16px; padding: 16px; background: color-mix(in srgb, var(--lvl) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--lvl) 30%, transparent); }
+.poll-top { display: flex; gap: 14px; align-items: center; }
+.poll-num { flex: none; width: 76px; height: 76px; border-radius: 50%; background: var(--lvl); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.poll-num b { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.poll-num small { font-size: 11px; opacity: .9; }
+.poll-txt b { font-size: 17px; font-weight: 600; color: var(--lvl); }
+.poll-txt p { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+.poll-scale { margin-top: 16px; }
+.poll-bar { position: relative; height: 10px; border-radius: 99px; background: linear-gradient(90deg, #2E9E4F 0 16.7%, #C9A100 16.7% 33.3%, #E07A00 33.3% 50%, #C42A36 50% 66.7%, #7B2D8E 66.7% 90%, #6B1020 90%); }
+.poll-mark { position: absolute; top: 50%; width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 4px solid var(--lvl); transform: translate(-50%, -50%); box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+.poll-ends { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; font-weight: 500; color: var(--text-subtle); }
+.poll-peak { margin: 12px 0 0; font-size: 13px; color: var(--text-muted); }
+.poll-peak small { color: var(--text-subtle); }
+.poll-h { margin: 16px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.poll-levels { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.poll-levels li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 10px; font-size: 13px; }
+.poll-levels li i { flex: none; width: 12px; height: 12px; border-radius: 4px; }
+.poll-levels li span { flex: 1; }
+.poll-levels li b { font-weight: 500; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+.poll-levels li.on { background: var(--surface-muted); font-weight: 600; }
+.poll-levels li.on b { color: var(--text); }
+.poll-parts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.poll-parts > div { background: var(--surface-muted); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; }
+.poll-parts small { font-size: 11px; color: var(--text-subtle); }
+.poll-parts b { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Emergency calls ---------- */
+.sos-fab { position: absolute; left: 16px; bottom: calc(var(--sheet-peek, 300px) + 16px); z-index: 4; width: 52px; height: 52px; border: 3px solid #fff; border-radius: 50%; background: var(--danger); color: #fff; font-weight: 700; font-size: 13px; letter-spacing: .04em; box-shadow: 0 4px 14px rgba(196,42,54,.4); transition: bottom 280ms var(--ease-out); }
+body.navigating .sos-fab { bottom: 24px; }
+@media (min-width: 900px) { .sos-fab { left: auto; right: 80px; bottom: 24px; } }
+.sos-dlg { padding: 0; max-height: min(86dvh, 760px); overflow: hidden; }
+.sos-dlg[open] { display: flex; flex-direction: column; }
+.sos-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 8px; }
+.sos-head h2 { margin: 0; }
+#sos-body { overflow-y: auto; padding: 4px 20px 20px; }
+.sos-999 { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 16px; background: var(--danger); color: #fff; text-decoration: none; }
+.sos-999 svg { width: 28px; height: 28px; flex: none; }
+.sos-999 b { display: block; font-size: 26px; font-weight: 700; line-height: 1.1; }
+.sos-999 small { font-size: 13px; opacity: .92; }
+.sos-loc { margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--surface-muted); }
+.sos-loc small { font-size: 12px; color: var(--text-subtle); }
+.sos-loc div { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+.sos-loc b { font-variant-numeric: tabular-nums; font-size: 15px; }
+.sos-group h3 { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px; font-size: 16px; font-weight: 600; }
+.sos-group h3 svg { width: 20px; height: 20px; color: var(--success); }
+.sos-group ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.sos-group li { display: flex; gap: 6px; }
+.sos-call { flex: 1; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; color: inherit; text-decoration: none; background: var(--surface); }
+.sos-call .mid { flex: 1; display: flex; flex-direction: column; }
+.sos-call b { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sos-call small { font-size: 12px; color: var(--text-muted); line-height: 1.35; }
+.sos-ph { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: var(--ink); }
+.sos-ph svg, .sos-wa svg { width: 18px; height: 18px; }
+.urgent .sos-call { border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.urgent .sos-ph { background: var(--danger); color: #fff; }
+.sos-wa { flex: none; width: 48px; display: grid; place-items: center; border-radius: 12px; background: #25D366; color: #fff; }
+.sos-group .btn-ghost { display: inline-flex; align-items: center; gap: 8px; }
+.sos-group .btn-ghost svg { width: 18px; height: 18px; }
+.muted.sm { font-size: 12px; line-height: 1.45; }
+.btn-ghost.sm svg { width: 16px; height: 16px; }
+.sos-loc .btn-ghost { display: inline-flex; align-items: center; gap: 6px; }

@@ -1,5 +1,11 @@
 const STR = {
   en: {
+    sosTitle: 'Emergency calls', sosLead: 'In danger? Call 999. Calls are free.', myCoords: 'Your location (read this to the operator)',
+    copy: 'Copy', copied: 'Location copied', locUnknown: 'Location not found yet. Tap the arrow button on the map.', findWorkshop: 'Find a workshop nearby',
+    whatsapp: 'WhatsApp', sosNote: 'Numbers checked October 2026. NAVMAP is not an emergency service.',
+    pollution: 'Pollution index', pollClean: 'Clean', pollWorst: 'Worst', pollNow: 'Now', pollPeak: 'Worst in next 24 h',
+    pollLevels: 'Levels', pollParts: 'What is in the air (µg/m³)', pollSource: 'Estimated from the Copernicus (CAMS) air-quality model via Open-Meteo, using the US AQI scale. For official DOE readings see',
+    pollNa: 'Pollution data is not available right now.',
     tabWeather: 'Weather', unpin: 'Remove pin', unpinned: 'Pin removed', unpinFailed: 'Could not remove the pin',
     noPins: 'No community pins nearby yet. Be the first to share what the weather is like.',
     communityWx: 'Community weather', liveShared: 'Live · shared', deviceOnly: 'This device only', pinWeather: 'Pin weather here',
@@ -27,6 +33,12 @@ const STR = {
     arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
+    sosTitle: 'Panggilan kecemasan', sosLead: 'Dalam bahaya? Hubungi 999. Panggilan percuma.', myCoords: 'Lokasi anda (bacakan kepada operator)',
+    copy: 'Salin', copied: 'Lokasi disalin', locUnknown: 'Lokasi belum dijumpai. Tekan butang anak panah pada peta.', findWorkshop: 'Cari bengkel berdekatan',
+    whatsapp: 'WhatsApp', sosNote: 'Nombor disemak Oktober 2026. NAVMAP bukan perkhidmatan kecemasan.',
+    pollution: 'Indeks pencemaran', pollClean: 'Bersih', pollWorst: 'Paling teruk', pollNow: 'Kini', pollPeak: 'Paling teruk dalam 24 jam',
+    pollLevels: 'Tahap', pollParts: 'Kandungan udara (µg/m³)', pollSource: 'Anggaran daripada model kualiti udara Copernicus (CAMS) melalui Open-Meteo, skala US AQI. Bacaan rasmi JAS di',
+    pollNa: 'Data pencemaran tiada buat masa ini.',
     tabWeather: 'Cuaca', unpin: 'Buang pin', unpinned: 'Pin dibuang', unpinFailed: 'Tidak dapat membuang pin',
     noPins: 'Belum ada pin komuniti berdekatan. Jadi yang pertama kongsi keadaan cuaca.',
     communityWx: 'Cuaca komuniti', liveShared: 'Langsung · dikongsi', deviceOnly: 'Peranti ini sahaja', pinWeather: 'Pin cuaca di sini',

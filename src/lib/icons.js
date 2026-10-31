@@ -41,6 +41,13 @@ const P = {
   storm: '<path d="M7 15a5 5 0 1 1 1-9.9A6 6 0 0 1 19 7a4 4 0 0 1-1 8"/><path d="m13 11-3 5h4l-3 5"/>',
   wind: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/>',
   radar: '<path d="M12 12 19 5"/><path d="M19.4 9A8 8 0 1 1 15 4.6"/><path d="M15.5 10.5A4 4 0 1 1 13.5 8.5"/>',
+  workshop: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3 17.7 6.3 21l6.3-6.3a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="M12 8v5M12 16h.01"/>',
+  car: '<path d="M5 16h14v-4l-2-5H7l-2 5zM5 16v3M19 16v3M3 11h2M19 11h2"/><circle cx="8" cy="13" r=".8"/><circle cx="16" cy="13" r=".8"/>',
+  heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  chat: '<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  leaf: '<path d="M4 20c0-9 6-15 16-16-1 10-7 16-16 16zM4 20l8-8"/>',
   arrive: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
 };
 export const icon = (name, cls = '') => `<svg viewBox="0 0 24 24" aria-hidden="true"${cls ? ` class="${cls}"` : ''}>${P[name] || P.pin}</svg>`;

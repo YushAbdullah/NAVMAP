@@ -17,6 +17,7 @@ export const CATEGORIES = {
   toilet:   { en: 'Toilets', bm: 'Tandas', short: { en: 'Toilets', bm: 'Tandas' }, q: 'nwr["amenity"="toilets"]' },
   surau:    { en: 'Surau & masjid', bm: 'Surau & masjid', short: { en: 'Surau', bm: 'Surau' }, q: 'nwr["amenity"="place_of_worship"]["religion"="muslim"]' },
   hospital: { en: 'Hospitals & clinics', bm: 'Hospital & klinik', short: { en: 'Hospitals', bm: 'Hospital' }, q: 'nwr["amenity"~"^(hospital|clinic)$"]' },
+  workshop: { en: 'Car workshops & tyres', bm: 'Bengkel kereta & tayar', short: { en: 'Workshop', bm: 'Bengkel' }, q: 'nwr["shop"~"^(car_repair|tyres)$"]' },
 };
 
 export const RADIUS_M = 4000;

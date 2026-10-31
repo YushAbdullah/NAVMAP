@@ -18,13 +18,25 @@ export function wmo(code, isDay = 1) {
   return T('cloud', 'Cloudy', 'Berawan', 'cloud');
 }
 
+// Pollution index levels, from cleanest to worst (US AQI scale: 0 to 500).
+export const AQ_LEVELS = [
+  { max: 50, level: 'good', color: '#2E9E4F', en: 'Good', bm: 'Baik',
+    adv: { en: 'Air is clean. Enjoy outdoor activities.', bm: 'Udara bersih. Sesuai untuk aktiviti luar.' } },
+  { max: 100, level: 'mod', color: '#C9A100', en: 'Moderate', bm: 'Sederhana',
+    adv: { en: 'Acceptable. Very sensitive people should limit long outdoor effort.', bm: 'Boleh diterima. Individu sangat sensitif hadkan aktiviti luar yang lama.' } },
+  { max: 150, level: 'usg', color: '#E07A00', en: 'Unhealthy for sensitive groups', bm: 'Tidak sihat (kumpulan sensitif)',
+    adv: { en: 'Children, elderly and people with asthma or heart problems should reduce time outside.', bm: 'Kanak-kanak, warga emas dan pesakit asma atau jantung kurangkan masa di luar.' } },
+  { max: 200, level: 'bad', color: '#C42A36', en: 'Unhealthy', bm: 'Tidak sihat',
+    adv: { en: 'Everyone should reduce outdoor activity. Wear a mask outside.', bm: 'Semua orang kurangkan aktiviti luar. Pakai pelitup muka di luar.' } },
+  { max: 300, level: 'vbad', color: '#7B2D8E', en: 'Very unhealthy', bm: 'Sangat tidak sihat',
+    adv: { en: 'Stay indoors, close windows, use an N95 mask if you must go out.', bm: 'Duduk di dalam rumah, tutup tingkap, pakai pelitup N95 jika perlu keluar.' } },
+  { max: Infinity, level: 'haz', color: '#6B1020', en: 'Hazardous (worst)', bm: 'Berbahaya (paling teruk)',
+    adv: { en: 'Health emergency. Avoid all outdoor activity.', bm: 'Kecemasan kesihatan. Elakkan semua aktiviti luar.' } },
+];
+
 export function aqiLabel(aqi) {
   if (aqi == null) return null;
-  if (aqi <= 50) return { en: 'Good', bm: 'Baik', level: 'good' };
-  if (aqi <= 100) return { en: 'Moderate', bm: 'Sederhana', level: 'mod' };
-  if (aqi <= 150) return { en: 'Unhealthy for sensitive groups', bm: 'Tidak sihat (sensitif)', level: 'bad' };
-  if (aqi <= 200) return { en: 'Unhealthy', bm: 'Tidak sihat', level: 'bad' };
-  return { en: 'Very unhealthy', bm: 'Sangat tidak sihat', level: 'bad' };
+  return AQ_LEVELS.find((l) => aqi <= l.max);
 }
 
 export async function fetchWeather(lat, lon) {
@@ -38,7 +50,7 @@ export async function fetchWeather(lat, lon) {
     hourly: 'temperature_2m,precipitation_probability,weather_code,is_day',
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max',
   });
-  const aq = new URLSearchParams({ latitude: la, longitude: lo, timezone: 'Asia/Kuala_Lumpur', current: 'us_aqi,pm2_5' });
+  const aq = new URLSearchParams({ latitude: la, longitude: lo, timezone: 'Asia/Kuala_Lumpur', current: 'us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide', hourly: 'us_aqi', forecast_days: '2' });
   const p = Promise.all([
     fetch(`https://api.open-meteo.com/v1/forecast?${fc}`).then((r) => { if (!r.ok) throw new Error('weather'); return r.json(); }),
     fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${aq}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
@@ -58,6 +70,20 @@ export async function fetchWeather(lat, lon) {
       now: { temp: c.temperature_2m, feels: c.apparent_temperature, humidity: c.relative_humidity_2m, rain: c.precipitation, wind: c.wind_speed_10m, code: c.weather_code, isDay: c.is_day },
       hours, days,
       aqi: a?.current?.us_aqi ?? null, pm25: a?.current?.pm2_5 ?? null,
+      air: a?.current ? {
+        pm25: a.current.pm2_5, pm10: a.current.pm10, o3: a.current.ozone, no2: a.current.nitrogen_dioxide,
+        so2: a.current.sulphur_dioxide, co: a.current.carbon_monoxide,
+        // worst index expected over the next 24 hours
+        peak: (() => {
+          const ts = a.hourly?.time || [], v = a.hourly?.us_aqi || [];
+          let best = null;
+          ts.forEach((t, i) => {
+            const ms = new Date(`${t}:00+08:00`).getTime();
+            if (ms > now && ms < now + 24 * 3600e3 && v[i] != null && (!best || v[i] > best.aqi)) best = { aqi: v[i], time: t };
+          });
+          return best;
+        })(),
+      } : null,
     };
   });
   cache.set(key, { at: Date.now(), p });
