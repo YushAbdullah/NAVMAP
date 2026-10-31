@@ -1,0 +1,60 @@
+const STR = {
+  en: {
+    searchLabel: 'Search places', searchPh: 'Search places, address, EV…', tabExplore: 'Explore', tabDrive: 'Drive', tabAlerts: 'Alerts',
+    report: 'Report a hazard', locate: 'Centre on my location', stop: 'End',
+    reportTitle: 'Report a hazard here', reportHint: 'Your report is placed at the centre of the map and kept on this device for 3 hours.', cancel: 'Cancel',
+    nearby: 'Nearby', seeAll: 'See all', showLess: 'Show less', pickCat: 'What do you need nearby?',
+    pickCatHint: 'Pick a category above, or search for any place in Malaysia.',
+    loading: 'Looking around…', none: 'Nothing found within 4 km. Try zooming out or moving the map.',
+    failed: 'Could not load places right now. Please try again.', retry: 'Try again', searchArea: 'Search this area',
+    directions: 'Directions', start: 'Start', close: 'Close', from: 'From', to: 'To', myLocation: 'My location', mapCentre: 'Map centre',
+    noDest: 'Where to?', noDestHint: 'Search for a place or tap a nearby result, then press Directions.',
+    routing: 'Finding the best route…', routeFailed: 'Could not find a route.', via: 'via', steps: 'Steps',
+    routeWarn: 'This route passes near an active alert', routeOk: 'No active alerts on this route',
+    alertsTitle: 'Live alerts', all: 'All', flood: 'Floods', weather: 'Weather', quake: 'Earthquakes', reports: 'Reports',
+    noAlerts: 'No active alerts right now.', sample: 'Live feeds are unreachable, so you are seeing SAMPLE alerts. Do not rely on them.',
+    sourceNote: 'Sources: JPS flood stations and MetMalaysia warnings via data.gov.my. NAVMAP is not an official warning service. In an emergency call 999. <a href="/privacy.html">Privacy & disclaimer</a>',
+    updated: 'Updated', showOnMap: 'Show on map', away: 'away', reported: 'Thanks. Your report is on the map.',
+    geoDenied: 'Location is off. Using the map centre instead.', fastest: 'Fastest', alt: 'Alternative', safest: 'Avoids alerts',
+    arrived: 'You have arrived', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
+  },
+  bm: {
+    searchLabel: 'Cari tempat', searchPh: 'Cari tempat, alamat, EV…', tabExplore: 'Teroka', tabDrive: 'Pandu', tabAlerts: 'Amaran',
+    report: 'Laporkan bahaya', locate: 'Ke lokasi saya', stop: 'Tamat',
+    reportTitle: 'Laporkan bahaya di sini', reportHint: 'Laporan diletakkan di tengah peta dan disimpan di peranti ini selama 3 jam.', cancel: 'Batal',
+    nearby: 'Berdekatan', seeAll: 'Lihat semua', showLess: 'Kurangkan', pickCat: 'Apa yang anda perlukan?',
+    pickCatHint: 'Pilih kategori di atas, atau cari mana-mana tempat di Malaysia.',
+    loading: 'Mencari…', none: 'Tiada dalam 4 km. Cuba zum keluar atau gerakkan peta.',
+    failed: 'Tidak dapat memuatkan tempat. Sila cuba lagi.', retry: 'Cuba lagi', searchArea: 'Cari kawasan ini',
+    directions: 'Arah', start: 'Mula', close: 'Tutup', from: 'Dari', to: 'Ke', myLocation: 'Lokasi saya', mapCentre: 'Tengah peta',
+    noDest: 'Ke mana?', noDestHint: 'Cari tempat atau pilih hasil berdekatan, kemudian tekan Arah.',
+    routing: 'Mencari laluan terbaik…', routeFailed: 'Laluan tidak ditemui.', via: 'melalui', steps: 'Langkah',
+    routeWarn: 'Laluan ini melalui kawasan amaran aktif', routeOk: 'Tiada amaran aktif di laluan ini',
+    alertsTitle: 'Amaran langsung', all: 'Semua', flood: 'Banjir', weather: 'Cuaca', quake: 'Gempa bumi', reports: 'Laporan',
+    noAlerts: 'Tiada amaran aktif sekarang.', sample: 'Suapan langsung tidak dapat dicapai, jadi ini amaran CONTOH. Jangan bergantung padanya.',
+    sourceNote: 'Sumber: stesen banjir JPS dan amaran MetMalaysia melalui data.gov.my. NAVMAP bukan perkhidmatan amaran rasmi. Kecemasan, hubungi 999. <a href="/privacy.html">Privasi & penafian</a>',
+    updated: 'Dikemas kini', showOnMap: 'Lihat di peta', away: 'dari sini', reported: 'Terima kasih. Laporan anda di peta.',
+    geoDenied: 'Lokasi dimatikan. Menggunakan tengah peta.', fastest: 'Terpantas', alt: 'Alternatif', safest: 'Elak amaran',
+    arrived: 'Anda telah tiba', hours: 'Waktu', call: 'Hubungi', inMalaysia: 'Malaysia',
+  },
+};
+
+let lang = (() => {
+  try { return localStorage.getItem('navmap.lang') || (navigator.language?.startsWith('ms') ? 'bm' : 'en'); } catch { return 'en'; }
+})();
+
+export const getLang = () => lang;
+export const t = (k) => STR[lang][k] ?? STR.en[k] ?? k;
+export function setLang(l) {
+  lang = l;
+  try { localStorage.setItem('navmap.lang', l); } catch { /* ignore */ }
+  applyStatic();
+}
+export function applyStatic() {
+  document.documentElement.lang = lang === 'bm' ? 'ms' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+}
+/** Pick the BM or EN field of an object (e.g. title / title_bm). */
+export const L = (o, k) => (lang === 'bm' && o[`${k}_bm`]) || o[k] || '';
