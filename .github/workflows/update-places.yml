@@ -37,4 +37,5 @@ jobs:
               git pull --rebase origin main && git push && break
               sleep $((i * 10))
             done
+            git push   # fails the job if every retry was rejected
           fi
