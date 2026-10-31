@@ -94,9 +94,11 @@ export async function fetchNews(fetchImpl = fetch, { maxAgeDays = 4, limit = 80 
   const items = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
     .map((it) => ({ ...it, topic: topicOf(`${it.title} ${it.summary}`) }))
     .filter((it) => (it.filter ? it.topic : true))
+    .filter((it) => !/facebook|youtube|tiktok|instagram|twitter|threads|reddit|^x$/i.test(it.source)) // social posts are not news
     .filter((it) => !it.time || new Date(it.time).getTime() > cutoff)
     .filter((it) => { const k = norm(it.title); if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((a, b) => (b.time || '').localeCompare(a.time || ''))
+    .filter((it, _, arr) => arr.filter((x) => x.feed === it.feed).indexOf(it) < 12) // no single feed takes over
     .filter((it, _, arr) => arr.filter((x) => x.region === it.region).indexOf(it) < limit / 2) // keep both regions
     .map(({ filter, ...it }) => ({ ...it, topic: it.topic || 'nature' }));
   return { items, feedsOk: ok, feedsTotal: FEEDS.length, at: new Date().toISOString() };
