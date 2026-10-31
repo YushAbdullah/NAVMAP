@@ -1,5 +1,10 @@
 const STR = {
   en: {
+    tabNews: 'News', newsTitle: 'Nature & climate news', newsLead: 'Live headlines about floods, weather, haze, climate and nature, from Malaysia and around the world.',
+    newsLoading: 'Loading the latest news…', newsFailed: 'Could not load the news right now.', newsNone: 'No news for this filter yet.',
+    newsLocal: 'Malaysia', newsWorld: 'World', allTopics: 'All topics',
+    topic_disaster: 'Disaster', topic_weather: 'Weather', topic_haze: 'Haze & pollution', topic_climate: 'Climate', topic_nature: 'Nature',
+    newsSource: 'Headlines from public news feeds (Google News, Malay Mail, The Star, The Guardian, BBC, UN News, Mongabay). Articles open on the publisher\'s site and belong to them. NAVMAP does not check or endorse them.',
     copyright: '© 2026 NAVMAP by Yush Abdullah. All rights reserved.', terms: 'Terms of Service', privacy: 'Privacy Policy',
     sosTitle: 'Emergency calls', sosLead: 'In danger? Call 999. Calls are free.', myCoords: 'Your location (read this to the operator)',
     copy: 'Copy', copied: 'Location copied', locUnknown: 'Location not found yet. Tap the arrow button on the map.', findWorkshop: 'Find a workshop nearby',
@@ -34,6 +39,11 @@ const STR = {
     arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
+    tabNews: 'Berita', newsTitle: 'Berita alam & iklim', newsLead: 'Tajuk berita terkini tentang banjir, cuaca, jerebu, iklim dan alam semula jadi, dari Malaysia dan seluruh dunia.',
+    newsLoading: 'Memuatkan berita terkini…', newsFailed: 'Tidak dapat memuatkan berita sekarang.', newsNone: 'Tiada berita untuk penapis ini.',
+    newsLocal: 'Malaysia', newsWorld: 'Dunia', allTopics: 'Semua topik',
+    topic_disaster: 'Bencana', topic_weather: 'Cuaca', topic_haze: 'Jerebu & pencemaran', topic_climate: 'Iklim', topic_nature: 'Alam',
+    newsSource: 'Tajuk daripada suapan berita awam (Google News, Malay Mail, The Star, The Guardian, BBC, UN News, Mongabay). Artikel dibuka di laman penerbit dan milik mereka. NAVMAP tidak menyemak atau menyokongnya.',
     copyright: '© 2026 NAVMAP oleh Yush Abdullah. Hak cipta terpelihara.', terms: 'Terma Perkhidmatan', privacy: 'Dasar Privasi',
     sosTitle: 'Panggilan kecemasan', sosLead: 'Dalam bahaya? Hubungi 999. Panggilan percuma.', myCoords: 'Lokasi anda (bacakan kepada operator)',
     copy: 'Salin', copied: 'Lokasi disalin', locUnknown: 'Lokasi belum dijumpai. Tekan butang anak panah pada peta.', findWorkshop: 'Cari bengkel berdekatan',

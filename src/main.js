@@ -30,6 +30,7 @@ const S = {
   alerts: [], alertMode: 'loading', alertsAt: null, alertFilter: 'all',
   reports: [],
   wx: null, wxStatus: 'idle', wxPlace: '', radar: false,
+  news: [], newsStatus: 'idle', newsAt: 0, newsRegion: 'all', newsTopic: 'all',
   me: null,                 // [lon, lat]
   nav: null,                // { step, watchId }
   showAlertLayer: true,
@@ -519,6 +520,7 @@ function renderChips() {
 function setTab(tab) {
   if (S.tab !== tab) $('#sheet-body').scrollTop = 0;
   if (tab === 'weather') loadWeather();
+  if (tab === 'news') loadNews();
   if (sheetState === 'peek') setSheet('half');
   S.tab = tab;
   render();
@@ -530,7 +532,7 @@ function render() {
     if (b.dataset.tab === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   const body = $('#sheet-body');
-  body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : (S.selected ? viewPlace() : viewExplore());
+  body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : S.tab === 'news' ? viewNews() : (S.selected ? viewPlace() : viewExplore());
   body.insertAdjacentHTML('beforeend', `<p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a></p>`);
   syncLayout();
 }
@@ -788,6 +790,49 @@ function viewAlerts() {
   return `${head}${sample}${filters}${rows}<p class="source">${t('sourceNote')}</p>`;
 }
 
+// ---------------------------------------------------------------- live news (environment & nature)
+async function loadNews(force = false) {
+  if (!force && (S.newsStatus === 'loading' || (S.news.length && Date.now() - S.newsAt < 10 * 60e3))) return;
+  S.newsStatus = 'loading'; if (S.tab === 'news') render();
+  try {
+    const r = await fetch('/api/news');
+    const j = await r.json();
+    if (!j.items?.length) throw new Error('empty');
+    S.news = j.items; S.newsAt = Date.now(); S.newsStatus = 'ok';
+  } catch { S.newsStatus = S.news.length ? 'ok' : 'error'; }
+  if (S.tab === 'news') render();
+}
+setInterval(() => { if (S.tab === 'news' && !document.hidden) loadNews(); }, 5 * 60e3);
+
+const NEWS_TOPICS = ['disaster', 'weather', 'haze', 'climate', 'nature'];
+const NEWS_ICON = { disaster: 'flood', weather: 'rain', haze: 'haze', climate: 'sun', nature: 'leaf' };
+function viewNews() {
+  const lang = getLang();
+  const head = `<div class="sh-head"><h2>${t('newsTitle')}</h2><small style="color:var(--text-subtle);font-size:12px">${S.newsAt ? `${t('updated')} ${fmtAgo(new Date(S.newsAt).toISOString(), lang)}` : ''}</small></div>
+    <p class="muted" style="margin-bottom:10px">${t('newsLead')}</p>`;
+  if (S.newsStatus === 'loading' && !S.news.length) return `${head}<div class="empty-state"><span class="spinner"></span>${t('newsLoading')}</div>`;
+  if (S.newsStatus === 'error') return `${head}<div class="empty-state">${icon('leaf')}${t('newsFailed')}<button class="btn-ghost" data-action="news-retry">${t('retry')}</button></div>`;
+  const byRegion = S.news.filter((n) => S.newsRegion === 'all' || n.region === S.newsRegion);
+  const list = byRegion.filter((n) => S.newsTopic === 'all' || n.topic === S.newsTopic);
+  const regions = [['all', t('all')], ['my', t('newsLocal')], ['world', t('newsWorld')]].map(([k, label]) =>
+    `<button class="chip" data-news-region="${k}" aria-pressed="${S.newsRegion === k}">${label}</button>`).join('');
+  const topics = ['all', ...NEWS_TOPICS].map((k) => {
+    const n = byRegion.filter((x) => k === 'all' || x.topic === k).length;
+    if (k !== 'all' && !n) return '';
+    return `<button class="chip sm" data-news-topic="${k}" aria-pressed="${S.newsTopic === k}">${k === 'all' ? t('allTopics') : t(`topic_${k}`)} ${n}</button>`;
+  }).join('');
+  const rows = list.length ? `<ul class="news-list">${list.map((n) => `<li><a class="news-row" href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">
+      <span class="mid">
+        <span class="news-tag t-${esc(n.topic)}">${icon(NEWS_ICON[n.topic] || 'leaf')}${t(`topic_${n.topic}`)}${n.region === 'my' ? ' · Malaysia' : ''}</span>
+        <b>${esc(n.title)}</b>
+        ${n.summary ? `<small class="sum">${esc(n.summary)}</small>` : ''}
+        <small>${esc(n.source)}${n.time ? ` · ${esc(fmtAgo(n.time, lang))}` : ''}</small>
+      </span>
+      ${n.image ? `<img src="${esc(n.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
+    </a></li>`).join('')}</ul>` : `<div class="empty-state">${icon('leaf')}${t('newsNone')}</div>`;
+  return `${head}<div class="filters" role="group">${regions}</div><div class="filters topics" role="group">${topics}</div>${rows}<p class="source">${t('newsSource')}</p>`;
+}
+
 // ---------------------------------------------------------------- layout sync
 function syncLayout() {
   const sheet = $('#sheet');
@@ -862,10 +907,12 @@ function pickResult(r) {
 document.addEventListener('click', (e) => {
   const up = e.target.closest('[data-unpin]');
   if (up) { e.stopPropagation(); unpin(up.dataset.unpin); return; }
-  const el = e.target.closest('[data-cat],[data-place],[data-action],[data-route],[data-filter],[data-alert],[data-tab]');
+  const el = e.target.closest('[data-news-region],[data-news-topic],[data-cat],[data-place],[data-action],[data-route],[data-filter],[data-alert],[data-tab]');
   if (!el) return;
   if (el.dataset.tab) { setTab(el.dataset.tab); return; }
   if (el.dataset.cat) { loadPlaces(S.cat === el.dataset.cat && S.tab === 'explore' ? null : el.dataset.cat); return; }
+  if (el.dataset.newsRegion) { S.newsRegion = el.dataset.newsRegion; render(); return; }
+  if (el.dataset.newsTopic) { S.newsTopic = el.dataset.newsTopic; render(); return; }
   if (el.dataset.filter) { S.alertFilter = el.dataset.filter; render(); return; }
   if (el.dataset.route) { S.routeIdx = Number(el.dataset.route); drawRoutes(); render(); return; }
   if (el.dataset.alert) {
@@ -886,6 +933,7 @@ document.addEventListener('click', (e) => {
   if (act === 'pin-weather') openPinDialog();
   if (act === 'radar') toggleRadar();
   if (act === 'wx-retry') loadWeather(true);
+  if (act === 'news-retry') loadNews(true);
   if (act === 'poll-jump') $('#poll')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
