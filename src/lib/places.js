@@ -85,7 +85,7 @@ const cache = new Map();
 export const CELL_DEG = 1;
 export const cellKey = (lat, lon) => `${Math.floor(lat / CELL_DEG)}_${Math.floor(lon / CELL_DEG)}`;
 export const packPlace = (p) => [p.id, p.name, +p.lat.toFixed(5), +p.lon.toFixed(5), p.meta, p.address, p.hours, p.phone, p.website];
-const unpack = (a, cat) => ({ id: a[0], cat, name: a[1], lat: a[2], lon: a[3], meta: a[4] || '', address: a[5] || '', hours: a[6] || '', phone: a[7] || '', website: a[8] || '' });
+const unpack = (a, cat) => ({ id: a[0], cat, name: a[1] || (cat === 'workshop' ? 'Car workshop' : CATEGORIES[cat]?.en || 'Place'), lat: a[2], lon: a[3], meta: a[4] || '', address: a[5] || '', hours: a[6] || '', phone: a[7] || '', website: a[8] || '' });
 
 let manifestP = null;
 function manifest() {
@@ -153,7 +153,7 @@ export function toPlace(el, cat) {
   const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
   if (lat == null || lon == null) return null;
   const t = el.tags || {};
-  const fallback = { ev: 'EV charger', fuel: 'Fuel station', food: 'Fast food', toilet: 'Public toilet', surau: 'Surau', hospital: t.amenity === 'clinic' ? 'Clinic' : 'Hospital' }[cat];
+  const fallback = { ev: 'EV charger', fuel: 'Fuel station', food: 'Fast food', toilet: 'Public toilet', surau: 'Surau', hospital: t.amenity === 'clinic' ? 'Clinic' : 'Hospital', workshop: t.shop === 'tyres' ? 'Tyre shop' : 'Car workshop' }[cat] || CATEGORIES[cat]?.en || 'Place';
   const name = t.name || t['name:en'] || t['name:ms'] || t.brand || t.operator || fallback;
   const meta = [];
   if (cat === 'ev') {

@@ -1,5 +1,6 @@
 const STR = {
   en: {
+    gmapsSearch: 'Search on Google Maps', gmapsMore: 'Not listed here?', gmapsPlace: 'Reviews & photos on Google Maps',
     subTitle: 'Get NAVMAP updates', subLead: 'News about new features, safety tips and future NAVMAP campaigns, by email. No spam.', subEmail: 'Email address',
     subConsent: 'I agree that Yush Abdullah (NAVMAP) may store my email address and send me NAVMAP news, updates and future campaigns. I can unsubscribe at any time. See the <a href="/privacy.html" target="_blank">Privacy Policy</a>.',
     subBtn: 'Subscribe', subLink: 'Subscribe', subCard: 'Updates and campaigns by email. Unsubscribe any time.',
@@ -44,6 +45,7 @@ const STR = {
     arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
+    gmapsSearch: 'Cari di Google Maps', gmapsMore: 'Tiada dalam senarai?', gmapsPlace: 'Ulasan & gambar di Google Maps',
     subTitle: 'Dapatkan berita NAVMAP', subLead: 'Berita ciri baharu, tip keselamatan dan kempen NAVMAP akan datang melalui e-mel. Tiada spam.', subEmail: 'Alamat e-mel',
     subConsent: 'Saya bersetuju Yush Abdullah (NAVMAP) menyimpan alamat e-mel saya dan menghantar berita, kemas kini dan kempen NAVMAP akan datang. Saya boleh berhenti melanggan pada bila-bila masa. Lihat <a href="/privacy.html" target="_blank">Dasar Privasi</a>.',
     subBtn: 'Langgan', subLink: 'Langgan', subCard: 'Kemas kini dan kempen melalui e-mel. Berhenti bila-bila masa.',
