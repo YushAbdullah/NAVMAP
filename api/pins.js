@@ -40,6 +40,16 @@ async function activePins() {
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
+  // Health check: /api/pins?status=1 always answers 200 so setup problems are easy to see.
+  if (req.method === 'GET' && req.query?.status) {
+    let redisOk = false, error = null;
+    if (URL_ && TOKEN) { try { redisOk = (await redis('PING')) === 'PONG'; } catch (e) { error = String(e.message || e); } }
+    res.status(200).json({
+      configured: !!(URL_ && TOKEN), redisOk, error,
+      env: ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'REDIS_URL', 'KV_URL'].filter((k) => !!process.env[k]),
+    });
+    return;
+  }
   if (!URL_ || !TOKEN) { res.status(503).json({ configured: false, pins: [] }); return; }
   const deviceToken = req.headers['x-navmap-token'];
   const owner = deviceToken && deviceToken !== 'anon' ? sha(`owner:${deviceToken}`) : null;
