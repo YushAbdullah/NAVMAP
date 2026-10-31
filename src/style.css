@@ -19,7 +19,7 @@ button { cursor: pointer; }
 .muted { color: var(--text-muted); font-size: 14px; margin: 0; }
 svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 
-#app { position: fixed; inset: 0; }
+#app { position: fixed; inset: 0; height: 100vh; height: 100dvh; }
 #map { position: absolute; inset: 0; background: #EEF5EF; }
 
 /* ---------- Top ---------- */
@@ -63,6 +63,12 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 /* ---------- Sheet ---------- */
 .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--surface); border-radius: 24px 24px 0 0; box-shadow: 0 -12px 32px rgba(16,40,20,0.10); display: flex; flex-direction: column; max-height: 46vh; transition: max-height 280ms var(--ease-out); }
 .sheet.expanded { max-height: 82vh; }
+.sheet.peek { max-height: calc(132px + env(safe-area-inset-bottom)); cursor: pointer; }
+.sheet.peek .sheet-body { overflow: hidden; }
+.grab { touch-action: none; }
+@media (max-width: 899px) {
+  body.map-focus .banner { display: none; }
+}
 .grab { border: 0; background: transparent; padding: 10px 0 6px; display: grid; place-items: center; flex-shrink: 0; }
 .grab span { width: 40px; height: 4px; border-radius: 9999px; background: var(--border); }
 .sheet-body { overflow-y: auto; padding: 0 16px 12px; flex: 1; min-height: 0; overscroll-behavior: contain; }
@@ -181,7 +187,7 @@ dialog h2 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
 @media (min-width: 900px) {
   .top { left: 24px; right: auto; width: var(--sheet-w); top: 24px; }
   .chips { margin: 0; padding: 0 0 4px; flex-wrap: wrap; overflow: visible; }
-  .sheet, .sheet.expanded { left: 24px; right: auto; bottom: 24px; width: var(--sheet-w); top: var(--top-h, 200px); max-height: none; border-radius: 24px; box-shadow: var(--e3); }
+  .sheet, .sheet.expanded, .sheet.peek { left: 24px; right: auto; bottom: 24px; width: var(--sheet-w); top: var(--top-h, 200px); max-height: none; border-radius: 24px; box-shadow: var(--e3); }
   .grab { display: none; }
   .sheet-body { padding-top: 16px; }
   .fabs { bottom: 24px; right: 24px; }

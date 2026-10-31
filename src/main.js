@@ -226,6 +226,7 @@ function stopRefine() {
 // ---------------------------------------------------------------- data actions
 let placesAbort;
 async function loadPlaces(cat) {
+  openSheet();
   S.cat = cat; S.selected = null; S.showAll = false;
   S.tab = 'explore';
   renderChips();
@@ -270,6 +271,7 @@ function mapPadding() {
 }
 
 function selectPlace(p) {
+  openSheet();
   S.selected = p;
   S.tab = 'explore';
   drawPlaces();
@@ -279,6 +281,7 @@ function selectPlace(p) {
 
 let routeAbort;
 async function routeTo(dest) {
+  openSheet();
   S.dest = dest; S.tab = 'drive';
   S.routes = []; S.routeIdx = 0; S.routeStatus = 'loading';
   drawDest(); render();
@@ -509,6 +512,7 @@ function renderChips() {
 
 function setTab(tab) {
   if (S.tab !== tab) $('#sheet-body').scrollTop = 0;
+  if (sheetState === 'peek') setSheet('half');
   S.tab = tab;
   render();
   renderBanner();
@@ -679,6 +683,7 @@ results.addEventListener('click', (e) => {
 });
 
 function pickResult(r) {
+  openSheet();
   results.hidden = true;
   q.value = r.name;
   q.blur();
@@ -708,7 +713,7 @@ document.addEventListener('click', (e) => {
   const findPlace = (id) => S.places.find((p) => p.id === id) || (S.selected?.id === id ? S.selected : null);
   if (act === 'go') { const p = findPlace(el.dataset.place); if (p) routeTo({ id: p.id, name: p.name, lat: p.lat, lon: p.lon }); return; }
   if (el.dataset.place && !act) { const p = findPlace(el.dataset.place); if (p) selectPlace(p); return; }
-  if (act === 'toggle-all') { S.showAll = !S.showAll; if (S.showAll) $('#sheet').classList.add('expanded'); render(); }
+  if (act === 'toggle-all') { S.showAll = !S.showAll; setSheet(S.showAll ? 'full' : 'half'); render(); }
   if (act === 'retry') loadPlaces(S.cat);
   if (act === 'back') { S.selected = null; drawPlaces(); render(); }
   if (act === 'clear-route') clearRoute();
@@ -716,7 +721,50 @@ document.addEventListener('click', (e) => {
   if (act === 'start-nav') startNav();
 });
 
-$('#grab').addEventListener('click', () => { $('#sheet').classList.toggle('expanded'); });
+// ---------------------------------------------------------------- map-first sheet (mobile)
+// The map is the main view: touching the map shrinks the panel to a small strip,
+// tapping or swiping the strip brings it back. Desktop keeps the side panel.
+const isMobile = () => innerWidth < 900;
+let sheetState = 'half';
+function setSheet(state) {
+  if (!isMobile()) state = 'half';
+  sheetState = state;
+  const sh = $('#sheet');
+  sh.classList.toggle('peek', state === 'peek');
+  sh.classList.toggle('expanded', state === 'full');
+  document.body.classList.toggle('map-focus', state === 'peek');
+  $('#grab').setAttribute('aria-expanded', String(state !== 'peek'));
+  if (state === 'peek') $('#sheet-body').scrollTop = 0;
+}
+const LEVELS = ['peek', 'half', 'full'];
+function openSheet() { if (sheetState === 'peek') setSheet('half'); }
+const stepSheet = (dir) => setSheet(LEVELS[Math.max(0, Math.min(2, LEVELS.indexOf(sheetState) + dir))]);
+
+map.on('dragstart', () => { if (isMobile() && !S.nav) setSheet('peek'); });
+map.on('click', () => { if (isMobile() && !S.nav) setSheet(sheetState === 'peek' ? 'half' : 'peek'); });
+
+$('#grab').addEventListener('click', () => setSheet(sheetState === 'peek' ? 'half' : sheetState === 'half' ? 'full' : 'half'));
+$('#sheet').addEventListener('click', (e) => {
+  if (sheetState === 'peek' && !e.target.closest('.tabs, #grab')) setSheet('half');
+}, true);
+
+// swipe up / down on the handle or the panel content
+let swipeY = null;
+$('#sheet').addEventListener('touchstart', (e) => {
+  const fromBody = e.target.closest('#sheet-body');
+  swipeY = !fromBody || $('#sheet-body').scrollTop <= 0 || sheetState === 'peek' ? e.touches[0].clientY : null;
+}, { passive: true });
+$('#sheet').addEventListener('touchend', (e) => {
+  if (swipeY == null) return;
+  const dy = e.changedTouches[0].clientY - swipeY;
+  swipeY = null;
+  if (dy < -40) stepSheet(1);
+  else if (dy > 40) stepSheet(-1);
+}, { passive: true });
+
+// keep the map canvas matched to its container (iOS toolbars change the height)
+new ResizeObserver(() => map.resize()).observe($('#map'));
+window.visualViewport?.addEventListener('resize', () => map.resize());
 $('#locate-btn').addEventListener('click', () => locate());
 $('#hud-stop').addEventListener('click', stopNav);
 $('#hud-voice').addEventListener('click', () => {
