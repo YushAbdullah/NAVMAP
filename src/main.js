@@ -525,6 +525,7 @@ function setTab(tab) {
   S.tab = tab;
   render();
   renderBanner();
+  renderNewsBar();
 }
 
 function render() {
@@ -801,8 +802,46 @@ async function loadNews(force = false) {
     S.news = j.items; S.newsAt = Date.now(); S.newsStatus = 'ok';
   } catch { S.newsStatus = S.news.length ? 'ok' : 'error'; }
   if (S.tab === 'news') render();
+  renderNewsBar();
 }
-setInterval(() => { if (S.tab === 'news' && !document.hidden) loadNews(); }, 5 * 60e3);
+setInterval(() => { if (!document.hidden) loadNews(); }, 5 * 60e3);
+setTimeout(() => loadNews(), 2500);
+
+// Headline ticker above the alert banner: rotates the most relevant fresh stories, tap to read.
+let newsBarTimer = null, newsBarIdx = 0;
+const newsBarHidden = () => { try { return sessionStorage.getItem('navmap.newsbar') === 'off'; } catch { return false; } };
+function newsBarItems() {
+  const fresh = S.news.filter((n) => !n.time || Date.now() - new Date(n.time).getTime() < 24 * 3600e3);
+  const score = (n) => (n.region === 'my' ? 2 : 0) + (['disaster', 'weather', 'haze'].includes(n.topic) ? 1 : 0);
+  return [...fresh].sort((a, b) => score(b) - score(a) || (b.time || '').localeCompare(a.time || '')).slice(0, 6);
+}
+function renderNewsBar() {
+  const bar = $('#news-bar');
+  const items = newsBarItems();
+  const show = items.length && S.tab !== 'news' && !newsBarHidden();
+  bar.hidden = !show;
+  clearInterval(newsBarTimer);
+  if (show) {
+    const paint = () => {
+      const n = items[newsBarIdx % items.length];
+      const txt = $('#news-bar-txt');
+      txt.classList.remove('in'); void txt.offsetWidth; txt.classList.add('in');
+      $('#news-bar-tag').textContent = n.region === 'my' ? (getLang() === 'bm' ? 'BERITA' : 'NEWS') : (getLang() === 'bm' ? 'DUNIA' : 'WORLD');
+      $('#news-bar-tag').className = `nb-tag t-${n.topic}`;
+      txt.textContent = `${n.title} · ${n.source}`;
+      $('#news-bar-main').setAttribute('aria-label', `${t('newsTitle')}: ${n.title}`);
+      $('#news-bar-main').dataset.link = n.link;
+    };
+    paint();
+    newsBarTimer = setInterval(() => { if (!document.hidden) { newsBarIdx++; paint(); } }, 7000);
+  }
+  syncLayout();
+}
+$('#news-bar-main').addEventListener('click', () => { openSheet(); setTab('news'); });
+$('#news-bar-x').addEventListener('click', () => {
+  try { sessionStorage.setItem('navmap.newsbar', 'off'); } catch { /* ignore */ }
+  renderNewsBar();
+});
 
 const NEWS_TOPICS = ['disaster', 'weather', 'haze', 'climate', 'nature'];
 const NEWS_ICON = { disaster: 'flood', weather: 'rain', haze: 'haze', climate: 'sun', nature: 'leaf' };
