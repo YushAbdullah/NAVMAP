@@ -29,6 +29,18 @@ const P = {
   roundabout: '<circle cx="12" cy="10" r="4"/><path d="M12 14v7M16 10h4M17 5l3 0 0 3"/>',
   sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>',
   mute: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="m17 9 5 5M22 9l-5 5"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  partly: '<path d="M8 3v1.5M3.5 8H2M4.6 4.6l1 1M12.4 4.6l-1 1"/><path d="M5.3 10.6A3.5 3.5 0 0 1 11.5 7"/><path d="M8 20a4 4 0 1 1 .8-7.9A5 5 0 0 1 18 13a3.5 3.5 0 0 1-.5 7z"/>',
+  partlynight: '<path d="M11 4.5A4 4 0 0 0 6 9.5"/><path d="M8 20a4 4 0 1 1 .8-7.9A5 5 0 0 1 18 13a3.5 3.5 0 0 1-.5 7z"/>',
+  cloud: '<path d="M7 19a5 5 0 1 1 1-9.9A6 6 0 0 1 19 11a4 4 0 0 1-1 8z"/>',
+  fog: '<path d="M7 13a5 5 0 1 1 1-9.9A6 6 0 0 1 19 5a4 4 0 0 1 0 8"/><path d="M3 17h18M6 21h12"/>',
+  drizzle: '<path d="M7 15a5 5 0 1 1 1-9.9A6 6 0 0 1 19 7a4 4 0 0 1-1 8z"/><path d="M9 19v1M13 19v1M17 19v1"/>',
+  rain: '<path d="M7 14a5 5 0 1 1 1-9.9A6 6 0 0 1 19 6a4 4 0 0 1-1 8z"/><path d="M9 17l-1 3M13 17l-1 3M17 17l-1 3"/>',
+  heavyrain: '<path d="M7 12a5 5 0 1 1 1-9.9A6 6 0 0 1 19 4a4 4 0 0 1-1 8z"/><path d="M8 15l-1.5 4M12 15l-2 6M16 15l-1.5 4M20 15l-1 2.5"/>',
+  storm: '<path d="M7 15a5 5 0 1 1 1-9.9A6 6 0 0 1 19 7a4 4 0 0 1-1 8"/><path d="m13 11-3 5h4l-3 5"/>',
+  wind: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/>',
+  radar: '<path d="M12 12 19 5"/><path d="M19.4 9A8 8 0 1 1 15 4.6"/><path d="M15.5 10.5A4 4 0 1 1 13.5 8.5"/>',
   arrive: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
 };
 export const icon = (name, cls = '') => `<svg viewBox="0 0 24 24" aria-hidden="true"${cls ? ` class="${cls}"` : ''}>${P[name] || P.pin}</svg>`;

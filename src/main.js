@@ -10,7 +10,10 @@ import { searchPlaces } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
 import { loadAlerts } from './lib/alerts.js';
 import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voice.js';
-import { REPORT_TYPES, listReports, addReport } from './lib/reports.js';
+import { PIN_TYPES } from './lib/pin-types.js';
+import { listPins, addPin, removePin } from './lib/pins.js';
+import * as pinsMod from './lib/pins.js';
+import { fetchWeather, wmo, aqiLabel, placeName, radarFrames } from './lib/weather.js';
 
 const MAP_STYLE = import.meta.env.VITE_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
 const ALERT_REFRESH_MS = 5 * 60 * 1000;
@@ -24,7 +27,8 @@ const S = {
   dest: null,               // { name, lat, lon }
   routes: [], routeIdx: 0, routeStatus: 'idle', routeOrigin: null,
   alerts: [], alertMode: 'loading', alertsAt: null, alertFilter: 'all',
-  reports: listReports(),
+  reports: [],
+  wx: null, wxStatus: 'idle', wxPlace: '', radar: false,
   me: null,                 // [lon, lat]
   nav: null,                // { step, watchId }
   showAlertLayer: true,
@@ -136,9 +140,9 @@ function drawReports() {
   reportMarkers.forEach((m) => m.remove());
   reportMarkers = S.showAlertLayer ? S.reports.map((r) => {
     const el = document.createElement('button');
-    el.className = 'report-pin';
+    el.className = `report-pin sev-${r.severity}${r.mine ? ' mine' : ''}`;
     el.setAttribute('aria-label', L(r, 'title'));
-    el.innerHTML = icon(r.type === 'flood' ? 'flood' : r.type);
+    el.innerHTML = icon(r.icon || 'report');
     el.addEventListener('click', (e) => { e.stopPropagation(); alertPopup(r); });
     return new maplibregl.Marker({ element: el }).setLngLat([r.lon, r.lat]).addTo(map);
   }) : [];
@@ -165,7 +169,7 @@ function alertPopup(a) {
   popup?.remove();
   popup = new maplibregl.Popup({ offset: 14, maxWidth: '260px' })
     .setLngLat([a.lon, a.lat])
-    .setHTML(`<b>${esc(L(a, 'title'))}</b>${a.place ? `${esc(a.place)}<br>` : ''}${esc(L(a, 'desc'))}<br><small>${esc(a.source)} · ${esc(fmtAgo(a.time, getLang()))}</small>`)
+    .setHTML(`<b>${esc(L(a, 'title'))}</b>${a.place ? `${esc(a.place)}<br>` : ''}${esc(L(a, 'desc'))}<br><small>${esc(a.source)} · ${esc(fmtAgo(a.time, getLang()))}</small>${a.mine ? `<button class="unpin" data-unpin="${esc(a.pinId)}">${icon('close')}${t('unpin')}</button>` : ''}`)
     .addTo(map);
 }
 
@@ -191,6 +195,7 @@ function setMe(pos, fly) {
   if (fly && first) map.flyTo({ center: S.me, zoom: Math.max(map.getZoom(), 14), duration: 700 });
   if (first) {
     prefetchNearby(['ev', 'fuel'], S.me);
+    loadWeather(true);
     // results were loaded for the default map centre: reload them for the real location
     if (S.cat && S.placesCenter && distKm(S.placesCenter, S.me) > 2) loadPlaces(S.cat);
   }
@@ -494,7 +499,7 @@ function renderBanner() {
   if (!n || S.tab === 'alerts') { b.hidden = true; syncLayout(); return; }
   b.hidden = false;
   b.classList.toggle('warn', n.a.severity !== 'danger');
-  $('#banner-title').textContent = `${L(n.a, 'title')}${S.alertMode === 'sample' ? ' · SAMPLE' : ''}`;
+  $('#banner-title').textContent = `${L(n.a, 'title')}${S.alertMode === 'sample' && n.a.kind !== 'report' ? ' · SAMPLE' : ''}`;
   $('#banner-sub').textContent = [n.a.place || L(n.a, 'desc'), n.d != null ? `${fmtDist(n.d)} ${t('away')}` : ''].filter(Boolean).join(' · ');
   b.onclick = () => {
     if (n.a.lat != null) { map.flyTo({ center: [n.a.lon, n.a.lat], zoom: 13, padding: mapPadding() }); alertPopup(n.a); }
@@ -512,6 +517,7 @@ function renderChips() {
 
 function setTab(tab) {
   if (S.tab !== tab) $('#sheet-body').scrollTop = 0;
+  if (tab === 'weather') loadWeather();
   if (sheetState === 'peek') setSheet('half');
   S.tab = tab;
   render();
@@ -523,7 +529,7 @@ function render() {
     if (b.dataset.tab === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   const body = $('#sheet-body');
-  body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : (S.selected ? viewPlace() : viewExplore());
+  body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : (S.selected ? viewPlace() : viewExplore());
   syncLayout();
 }
 
@@ -602,6 +608,124 @@ function viewDrive() {
     <ol class="list steps">${steps}</ol>`;
 }
 
+// ---------------------------------------------------------------- weather
+async function loadWeather(force = false) {
+  const at = origin();
+  if (!force && S.wx && distKm([S.wx.lon, S.wx.lat], at) < 3 && Date.now() - new Date(S.wx.at).getTime() < 10 * 60e3) return;
+  if (!S.wx) S.wxStatus = 'loading';
+  if (S.tab === 'weather') render();
+  try {
+    const [wx, name] = await Promise.all([fetchWeather(at[1], at[0]), placeName(at[1], at[0])]);
+    S.wx = wx; S.wxPlace = name; S.wxStatus = 'ok';
+  } catch { if (!S.wx) S.wxStatus = 'error'; }
+  renderWxFab();
+  if (S.tab === 'weather') render();
+}
+
+function renderWxFab() {
+  const b = $('#wx-btn');
+  if (!S.wx) { b.hidden = true; return; }
+  const w = wmo(S.wx.now.code, S.wx.now.isDay);
+  b.hidden = false;
+  b.innerHTML = `${icon(w.icon)}<b>${Math.round(S.wx.now.temp)}°</b>`;
+  b.setAttribute('aria-label', `${Math.round(S.wx.now.temp)}° ${getLang() === 'bm' ? w.bm : w.en}. ${t('tabWeather')}`);
+}
+
+function viewWeather() {
+  const lang = getLang();
+  const nearPins = S.reports
+    .filter((r) => distKm(origin(), [r.lon, r.lat]) < 25)
+    .sort((a, b) => new Date(b.time) - new Date(a.time));
+  const pinRows = nearPins.length ? `<ul class="list">${nearPins.slice(0, 30).map((r) => `<li><div class="row">
+      <button class="pinrow" data-alert="${esc(r.id)}"><span class="ic ${r.severity === 'danger' ? 'danger' : r.severity === 'warning' ? 'warn' : 'info'}">${icon(r.icon)}</span>
+      <span class="mid"><b>${esc(L(r, 'title'))}</b><small>${fmtDist(distKm(origin(), [r.lon, r.lat]))} · ${esc(fmtAgo(r.time, lang))} · ${esc(L(r, 'desc'))}</small></span></button>
+      ${r.mine ? `<button class="btn-ghost sm" data-unpin="${esc(r.pinId)}">${t('unpin')}</button>` : ''}
+    </div></li>`).join('')}</ul>` : `<p class="muted">${t('noPins')}</p>`;
+  const community = `<div class="sh-head" style="margin-top:18px"><h2 style="font-size:18px">${t('communityWx')}</h2><span class="live-dot">${pinsMod.shared ? t('liveShared') : t('deviceOnly')}</span></div>
+    ${pinRows}
+    <div class="btns"><button class="btn" data-action="pin-weather">${icon('pin')}${t('pinWeather')}</button></div>`;
+  if (S.wxStatus === 'loading' || (!S.wx && S.wxStatus === 'idle')) return `<div class="empty-state"><span class="spinner"></span></div>${community}`;
+  if (!S.wx) return `<div class="empty-state">${icon('cloud')}${t('wxFailed')}<button class="btn-ghost" data-action="wx-retry">${t('retry')}</button></div>${community}`;
+  const w = S.wx, n = w.now, cur = wmo(n.code, n.isDay), today = w.days[0];
+  const hours = w.hours.slice(0, 13).map((h, i) => {
+    const c = wmo(h.code, h.isDay);
+    const label = i === 0 ? t('now') : new Date(`${h.time}:00+08:00`).toLocaleTimeString(lang === 'bm' ? 'ms-MY' : 'en-MY', { hour: 'numeric' });
+    return `<li><span>${esc(label)}</span>${icon(c.icon)}<small class="pop">${h.pop >= 20 ? `${h.pop}%` : '&nbsp;'}</small><b>${Math.round(h.temp)}°</b></li>`;
+  }).join('');
+  const lo = Math.min(...w.days.map((d) => d.min)), hi = Math.max(...w.days.map((d) => d.max));
+  const days = w.days.map((d, i) => {
+    const c = wmo(d.code, 1);
+    const name = i === 0 ? t('today') : new Date(`${d.date}T12:00:00+08:00`).toLocaleDateString(lang === 'bm' ? 'ms-MY' : 'en-MY', { weekday: 'short' });
+    const left = ((d.min - lo) / (hi - lo || 1)) * 100, width = ((d.max - d.min) / (hi - lo || 1)) * 100;
+    return `<li><span class="d">${esc(name)}</span>${icon(c.icon)}<small class="pop">${d.pop >= 20 ? `${d.pop}%` : ''}</small><span class="lo">${Math.round(d.min)}°</span><span class="bar"><i style="left:${left}%;width:${Math.max(width, 6)}%"></i></span><span class="hi">${Math.round(d.max)}°</span></li>`;
+  }).join('');
+  const aq = aqiLabel(w.aqi);
+  return `<div class="wx-card sky-${cur.sky}">
+      <div class="wx-top"><div><div class="wx-place">${esc(S.wxPlace || t('myLocation'))}</div><div class="wx-temp">${Math.round(n.temp)}°</div><div class="wx-cond">${esc(lang === 'bm' ? cur.bm : cur.en)}</div>
+      <div class="wx-hl">H ${Math.round(today.max)}° · L ${Math.round(today.min)}° · ${t('feels')} ${Math.round(n.feels)}°</div></div>
+      <span class="wx-big">${icon(cur.icon)}</span></div>
+      <ul class="wx-hours">${hours}</ul>
+    </div>
+    <div class="wx-stats">
+      <div><small>${t('humidity')}</small><b>${Math.round(n.humidity)}%</b></div>
+      <div><small>${t('wind')}</small><b>${Math.round(n.wind)} km/h</b></div>
+      <div><small>UV</small><b>${today.uv != null ? Math.round(today.uv) : '–'}</b></div>
+      <div class="aq-${aq?.level || 'na'}"><small>${t('air')}</small><b>${w.aqi != null ? Math.round(w.aqi) : '–'}</b><em>${aq ? esc(lang === 'bm' ? aq.bm : aq.en) : ''}</em></div>
+    </div>
+    <button class="btn-ghost radar-btn" data-action="radar" aria-pressed="${S.radar}">${icon('radar')}${S.radar ? t('radarOff') : t('radarOn')}</button>
+    <h3 class="wx-h">${t('sevenDay')}</h3>
+    <ul class="wx-days">${days}</ul>
+    ${community}
+    <p class="source">${t('wxSource')}</p>`;
+}
+
+// Rain radar (RainViewer): animated frames over the past ~2 hours.
+let radarTimer = null, radarIds = [];
+async function toggleRadar(on = !S.radar) {
+  S.radar = on;
+  await mapReady;
+  clearInterval(radarTimer);
+  radarIds.forEach((id) => { if (map.getLayer(id)) map.removeLayer(id); if (map.getSource(id)) map.removeSource(id); });
+  radarIds = [];
+  if (on) {
+    try {
+      const frames = (await radarFrames()).slice(-10);
+      const before = map.getLayer('alert-fill') ? 'alert-fill' : undefined;
+      frames.forEach((f, i) => {
+        const id = `radar-${i}`;
+        map.addSource(id, { type: 'raster', tiles: [f.url], tileSize: 256, maxzoom: 7, attribution: '<a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>' });
+        map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': 0, 'raster-opacity-transition': { duration: 300 } } }, before);
+        radarIds.push(id);
+      });
+      let k = 0;
+      const show = () => {
+        radarIds.forEach((id, i) => map.setPaintProperty(id, 'raster-opacity', i === k ? 0.65 : 0));
+        k = (k + 1) % radarIds.length;
+      };
+      show();
+      radarTimer = setInterval(show, 700);
+      if (map.getZoom() > 9) map.easeTo({ zoom: 8, duration: 600 });
+    } catch { S.radar = false; toast(t('radarFailed')); }
+  }
+  $('#radar-fab').setAttribute('aria-pressed', String(S.radar));
+  if (S.tab === 'weather') render();
+}
+
+// ---------------------------------------------------------------- community pins
+async function loadPins() {
+  try { S.reports = await listPins(); } catch { /* keep old */ }
+  drawAlerts(); renderBanner();
+  if (S.tab === 'weather' || S.tab === 'alerts') render();
+}
+
+async function unpin(pinId) {
+  popup?.remove();
+  const ok = await removePin(pinId).catch(() => false);
+  if (ok) { S.reports = S.reports.filter((r) => r.pinId !== pinId); toast(t('unpinned')); }
+  else toast(t('unpinFailed'));
+  drawAlerts(); renderBanner(); render();
+}
+
 function viewAlerts() {
   const lang = getLang();
   const ref = origin();
@@ -616,7 +740,7 @@ function viewAlerts() {
   const sample = S.alertMode === 'sample' ? `<div class="note">${icon('accident')}<span>${t('sample')}</span></div>` : '';
   const rows = list.length ? `<ul class="list">${list.slice(0, 150).map((a) => {
     const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
-    const ic = a.kind === 'report' ? (a.type === 'flood' ? 'flood' : a.type) : a.kind;
+    const ic = a.kind === 'report' ? (a.icon || 'report') : a.kind;
     return `<li><button class="row wrap" data-alert="${esc(a.id)}">
       <span class="ic ${a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info'}">${icon(ic)}</span>
       <span class="mid"><b style="font-size:15px">${esc(L(a, 'title'))}</b><small>${esc(a.place ? `${a.place} · ` : '')}${esc(L(a, 'desc'))}</small><small>${esc(a.source)} · ${esc(fmtAgo(a.time, lang))}</small></span>
@@ -698,6 +822,8 @@ function pickResult(r) {
 
 // ---------------------------------------------------------------- events
 document.addEventListener('click', (e) => {
+  const up = e.target.closest('[data-unpin]');
+  if (up) { e.stopPropagation(); unpin(up.dataset.unpin); return; }
   const el = e.target.closest('[data-cat],[data-place],[data-action],[data-route],[data-filter],[data-alert],[data-tab]');
   if (!el) return;
   if (el.dataset.tab) { setTab(el.dataset.tab); return; }
@@ -719,6 +845,9 @@ document.addEventListener('click', (e) => {
   if (act === 'clear-route') clearRoute();
   if (act === 'reroute' && S.dest) routeTo(S.dest);
   if (act === 'start-nav') startNav();
+  if (act === 'pin-weather') openPinDialog();
+  if (act === 'radar') toggleRadar();
+  if (act === 'wx-retry') loadWeather(true);
 });
 
 // ---------------------------------------------------------------- map-first sheet (mobile)
@@ -775,7 +904,7 @@ $('#hud-voice').addEventListener('click', () => {
 $('#lang-btn').addEventListener('click', () => {
   setLang(getLang() === 'en' ? 'bm' : 'en');
   $('#lang-btn').textContent = getLang() === 'en' ? 'BM' : 'EN';
-  renderChips(); renderBanner(); render(); renderReportGrid();
+  renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab();
   if (S.nav) updateHud();
 });
 $('#alerts-layer-btn').addEventListener('click', (e) => {
@@ -784,23 +913,31 @@ $('#alerts-layer-btn').addEventListener('click', (e) => {
   drawAlerts();
 });
 
-// Report dialog
+// Pin dialog: what is happening at the centre of the map (or your location)
 const dlg = $('#report-dlg');
 function renderReportGrid() {
-  $('#report-grid').innerHTML = REPORT_TYPES.map((r) =>
-    `<button type="button" data-report="${r.id}">${icon(r.id === 'flood' ? 'flood' : r.id)}${esc(getLang() === 'bm' ? r.bm : r.en)}</button>`).join('');
+  $('#report-grid').innerHTML = PIN_TYPES.map((r) =>
+    `<button type="button" data-report="${r.id}" class="sev-${r.sev}">${icon(r.icon)}${esc(getLang() === 'bm' ? r.bm : r.en)}</button>`).join('');
 }
-$('#report-btn').addEventListener('click', () => { renderReportGrid(); dlg.showModal(); });
-$('#report-grid').addEventListener('click', (e) => {
+function openPinDialog() { renderReportGrid(); dlg.showModal(); }
+$('#report-btn').addEventListener('click', openPinDialog);
+$('#report-grid').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-report]');
   if (!b) return;
-  const c = center();
-  const r = addReport(b.dataset.report, c[1], c[0]);
-  S.reports = [...S.reports, r];
+  // pin where the person is if they're looking near themselves, otherwise at the map centre
+  const c = S.me && distKm(S.me, center()) < 1 ? S.me : center();
   dlg.close();
-  drawAlerts(); renderBanner(); render();
-  toast(t('reported'));
+  try {
+    const r = await addPin(b.dataset.report, c[1], c[0]);
+    S.reports = [...S.reports.filter((x) => x.id !== r.id), r];
+    drawAlerts(); renderBanner(); render();
+    toast(pinsMod.shared ? t('pinnedShared') : t('pinnedLocal'));
+  } catch (err) {
+    toast(err.message === 'rate' ? t('pinRate') : t('pinFailed'));
+  }
 });
+$('#wx-btn').addEventListener('click', () => { openSheet(); setTab('weather'); });
+$('#radar-fab').addEventListener('click', () => toggleRadar());
 
 // ---------------------------------------------------------------- boot
 applyStatic();
@@ -811,6 +948,10 @@ renderReportGrid();
 locate({ fly: true, quiet: true });
 refreshAlerts();
 setInterval(refreshAlerts, ALERT_REFRESH_MS);
+loadPins();
+setInterval(() => { if (document.visibilityState === 'visible') loadPins(); }, 30 * 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadPins(); loadWeather(); } });
+setTimeout(() => loadWeather(), 1200);
 
 // deep link: ?cat=ev
 const urlCat = new URLSearchParams(location.search).get('cat');

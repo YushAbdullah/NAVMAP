@@ -16,7 +16,9 @@ It is a Progressive Web App (PWA): it works in any browser and can be installed 
 | Flood alerts | JPS water-level stations via [data.gov.my flood warning API](https://developer.data.gov.my/realtime-api/flood-warning) | Free |
 | Weather + earthquake warnings | MetMalaysia via [data.gov.my weather API](https://developer.data.gov.my/realtime-api/weather) | Free |
 | Route safety check | Flags routes that pass inside an active alert area and prefers a safer alternative | – |
-| Hazard reports (flood, accident, landslide, fallen tree, jam, haze) | Saved on the user's device for 3 hours | – |
+| Live weather (now, hourly, 7-day, UV, air quality) | [Open-Meteo](https://open-meteo.com) | Free, no key |
+| Animated rain radar | [RainViewer](https://www.rainviewer.com/api.html) | Free, no key |
+| Community pins (rain, heavy rain, storm, flood, wind, haze, landslide, fallen tree, hot, clear, accident, jam) | `api/pins.js` + Upstash Redis; only the device that pinned can remove it; pins expire after 1–12 h; 20 pins/hour per IP | Free tier |
 | BM / EN | Toggle in the search bar | – |
 
 If the alert feeds cannot be reached, the app shows **clearly labelled sample alerts** instead of failing silently.
@@ -48,6 +50,14 @@ HTTPS matters: browsers only allow GPS location on secure sites.
 - **Shared hazard reports:** reports are local-only right now. Next step is a backend (Supabase or Firebase) with moderation so everyone sees reports, plus push notifications for alerts near saved places.
 - **Haze (API/IPU):** not yet connected; DOE does not publish an open API. Possible sources: data.gov.my datasets or an agreement with DOE.
 - **Legal:** finish `public/privacy.html` (PDPA 2010 notice, contact email) and keep the "not an official warning service" disclaimer.
+
+## Turn on shared community pins (one time)
+
+Until this is done, pins are saved on each person's own device only.
+
+1. Vercel → your **navmap** project → **Storage** → **Create Database** → **Upstash for Redis** (free plan) → connect it to the navmap project.
+2. Vercel adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically. Redeploy (Deployments → ⋯ → Redeploy).
+3. The Weather tab then shows **Live · shared** under Community weather.
 
 ## Refresh the places data
 
