@@ -27,6 +27,8 @@ const P = {
   right: '<path d="M6 20v-7a3 3 0 0 1 3-3h10M14 5l5 5-5 5"/>',
   uturn: '<path d="M9 20V9a5 5 0 0 1 10 0v4M5 16l4 4 4-4"/>',
   roundabout: '<circle cx="12" cy="10" r="4"/><path d="M12 14v7M16 10h4M17 5l3 0 0 3"/>',
+  sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>',
+  mute: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="m17 9 5 5M22 9l-5 5"/>',
   arrive: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
 };
 export const icon = (name, cls = '') => `<svg viewBox="0 0 24 24" aria-hidden="true"${cls ? ` class="${cls}"` : ''}>${P[name] || P.pin}</svg>`;

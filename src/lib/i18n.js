@@ -16,7 +16,7 @@ const STR = {
     sourceNote: 'Sources: JPS flood stations and MetMalaysia warnings via data.gov.my. NAVMAP is not an official warning service. In an emergency call 999. <a href="/privacy.html">Privacy & disclaimer</a>',
     updated: 'Updated', showOnMap: 'Show on map', away: 'away', reported: 'Thanks. Your report is on the map.',
     geoDenied: 'Location is off. Using the map centre. Tip: open NAVMAP in Safari or Chrome and allow location.', fastest: 'Fastest', alt: 'Alternative', safest: 'Avoids alerts',
-    arrived: 'You have arrived', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
+    arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
     searchLabel: 'Cari tempat', searchPh: 'Cari tempat, alamat, EV…', tabExplore: 'Teroka', tabDrive: 'Pandu', tabAlerts: 'Amaran',
@@ -35,7 +35,7 @@ const STR = {
     sourceNote: 'Sumber: stesen banjir JPS dan amaran MetMalaysia melalui data.gov.my. NAVMAP bukan perkhidmatan amaran rasmi. Kecemasan, hubungi 999. <a href="/privacy.html">Privasi & penafian</a>',
     updated: 'Dikemas kini', showOnMap: 'Lihat di peta', away: 'dari sini', reported: 'Terima kasih. Laporan anda di peta.',
     geoDenied: 'Lokasi dimatikan. Menggunakan tengah peta. Tip: buka NAVMAP di Safari atau Chrome dan benarkan lokasi.', fastest: 'Terpantas', alt: 'Alternatif', safest: 'Elak amaran',
-    arrived: 'Anda telah tiba', hours: 'Waktu', call: 'Hubungi', inMalaysia: 'Malaysia',
+    arrived: 'Anda telah tiba', voiceOn: 'Hidupkan suara', voiceOff: 'Senyapkan suara', hours: 'Waktu', call: 'Hubungi', inMalaysia: 'Malaysia',
   },
 };
 
