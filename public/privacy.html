@@ -1,84 +1,161 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NAVMAP · Privacy Policy</title><meta name="description" content="How NAVMAP handles your personal data under Malaysia's Personal Data Protection Act 2010.">
+<title>NAVMAP · Privacy Policy</title><meta name="description" content="How NAVMAP collects, uses and protects personal data under Malaysia's Personal Data Protection Act 2010.">
 <link rel="stylesheet" href="/legal.css"></head>
 <body>
 <nav class="top"><a href="/">← Back to NAVMAP</a><a href="/terms.html">Terms of Service</a><a href="/privacy.html">Privacy Policy</a></nav>
 <h1>Privacy Policy</h1>
-<p class="meta">Effective date: 31 October 2026 · Operator: Yush Abdullah ("we", "us"), Malaysia</p>
+<p class="meta">Last updated: 31 October 2026 · Effective date: 31 October 2026<br>Operator: Yush Abdullah, Malaysia · Contact: <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a></p>
 
 <div class="box">
-<b>Summary.</b> NAVMAP has no accounts, no adverts and no tracking cookies. Your location stays in your browser and is never saved by us. If you post a community pin, we keep its type, place and time until it expires (1 to 12 hours). We do not sell your data.
+<b>In short</b>
+<ul>
+<li>NAVMAP has <b>no sign-up, no accounts, no adverts and no tracking or analytics cookies</b>.</li>
+<li>Your <b>location stays on your phone</b>. We never save it on our servers.</li>
+<li>If you post a <b>community pin</b>, we keep its type, place and time only until it expires (1 to 12 hours) or you remove it.</li>
+<li>We <b>never sell or rent</b> your data and never use it for advertising.</li>
+<li>You can ask us anything about your data at <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a>.</li>
+</ul>
 </div>
 
-<p>This policy explains how NAVMAP (the website at navmap.vercel.app and its installable web app, "the Service") processes personal data. It follows the Personal Data Protection Act 2010 of Malaysia (PDPA) and its seven principles: General, Notice and Choice, Disclosure, Security, Retention, Data Integrity and Access.</p>
+<h2>1. Who we are and what this policy covers</h2>
+<p>NAVMAP is a free navigation and live-alert map for Malaysia, available at <a href="https://navmap.vercel.app">navmap.vercel.app</a> and as an installable web app (together, the "Service"). The Service is owned and operated by <b>Yush Abdullah</b> ("we", "us", "our"), who is the data user responsible for your personal data.</p>
+<p>This Privacy Policy explains what personal data the Service processes, why, who it is shared with, how long it is kept and what rights you have. It is written to meet the <b>Personal Data Protection Act 2010</b> of Malaysia ("PDPA") and follows its seven principles: General, Notice and Choice, Disclosure, Security, Retention, Data Integrity and Access. Please read it together with our <a href="/terms.html">Terms of Service</a>.</p>
 
-<h2>1. Data we process</h2>
+<h3>Words we use</h3>
+<ul>
+<li><b>Personal data</b>: information that relates to you and can identify you, directly or together with other information.</li>
+<li><b>Processing</b>: collecting, recording, holding, using, sharing or deleting data.</li>
+<li><b>Community pin</b>: a short public report (for example "Heavy rain" or "Flood") that a user places on the map.</li>
+<li><b>Device code</b>: a random code created by your browser so the Service can recognise pins made on your device. It does not contain your name, phone number or any account.</li>
+</ul>
+
+<h2>2. What we collect and why, feature by feature</h2>
+
+<h3>2.1 Your location</h3>
+<p><b>What:</b> your GPS position, or an approximate position from your network, only after your browser or phone asks for permission and you allow it.</p>
+<p><b>Why:</b> to centre the map on you, list nearby places by distance, show the weather and pollution index for your area, warn you about alerts near you, give directions and turn-by-turn voice guidance, and show your coordinates in the SOS window.</p>
+<p><b>How it is handled:</b> your location is processed inside your browser. It is <b>not sent to or stored on our servers</b>, except as the rounded coordinates needed to request data for an area (see section 3). If you refuse or later turn off location permission, the Service still works using the centre of the map.</p>
+
+<h3>2.2 Searching for places</h3>
+<p><b>What:</b> the words you type in the search bar and the area of the map you are viewing.</p>
+<p><b>Why:</b> to find matching places in Malaysia. The search text goes to the Photon search service. We do not keep a search history.</p>
+
+<h3>2.3 Nearby places (EV, fuel, food, toilets, surau, hospitals, workshops)</h3>
+<p><b>What:</b> the category you chose and approximate coordinates (rounded to about 1 km).</p>
+<p><b>Why:</b> to list places near you. Most results load from a public file of places that is the same for everyone, so no location is sent at all. If we need fresher data, the rounded coordinates go through our server to the OpenStreetMap Overpass service. Nothing that identifies you is attached.</p>
+
+<h3>2.4 Directions and voice guidance</h3>
+<p><b>What:</b> your starting point and destination coordinates.</p>
+<p><b>Why:</b> to calculate driving routes. They are sent to the OSRM routing service. While you navigate, your position is compared with the route on your device to give the next instruction and reroute you. Voice guidance uses your phone's built-in speech engine, and nothing you hear is recorded or sent to us.</p>
+
+<h3>2.5 Weather, rain radar and pollution index</h3>
+<p><b>What:</b> coordinates rounded to about 5 km.</p>
+<p><b>Why:</b> to request the forecast and air quality from Open-Meteo, and rain radar images from RainViewer. An area name (for example "Petaling, Selangor") is looked up from Photon to label the weather card.</p>
+
+<h3>2.6 Official alerts</h3>
+<p>Flood, weather and earthquake alerts are downloaded from the Government of Malaysia open data portal (data.gov.my) through our server. No personal data is sent to get them; which alerts are near you is worked out on your device.</p>
+
+<h3>2.7 Community pins</h3>
+<p><b>What we store when you post a pin:</b> the pin type, the coordinates where you placed it, the time it was created and when it expires, and a one-way hash (a scrambled fingerprint) of your device code.</p>
+<p><b>Why:</b> to show live weather and hazard reports to other users nearby, and so that only your device can remove your pin. Other users see the pin type, place and time, never who posted it.</p>
+<p><b>How long:</b> each pin deletes itself automatically when it expires, between 1 and 12 hours depending on its type, or earlier if you press <b>Remove pin</b>.</p>
+<p><b>Spam protection:</b> to stop abuse we count pins per network for one hour. For this we store a one-way hash of your IP address for up to 1 hour. We cannot turn the hash back into your IP address.</p>
+
+<h3>2.8 SOS emergency calls</h3>
+<p>Tapping a number in the SOS window hands the call to your phone's own dialler or to WhatsApp. <b>We do not see, record or receive</b> who you call or when. The "Copy" button copies your coordinates to your own clipboard only.</p>
+
+<h3>2.9 Settings stored on your device</h3>
+<p>Your browser's local storage keeps your language choice (English or Bahasa Melayu), your device code, and your pins when the shared database is not available. A service worker stores a copy of the app so it opens faster and works with a weak signal. These stay on your device and are not sent to us.</p>
+
+<h3>2.10 Technical logs</h3>
+<p>Like every website, our hosting provider (Vercel) automatically records technical information when your browser requests a page: IP address, browser and device type, the page requested, time and error codes. These logs are used only to run, secure and fix the Service and are kept according to Vercel's retention period.</p>
+
+<h3>2.11 Emails you send us</h3>
+<p>If you email us, we receive your email address and whatever you write. We use it only to reply and handle your request, and delete it when it is no longer needed.</p>
+
+<h3>What we do not collect</h3>
+<p>We do not ask for or collect your name, IC or passport number, phone number, contacts, photos, payment details or account passwords. We do not knowingly process sensitive personal data (such as health, religious or political information) as defined in the PDPA. Please do not include personal details in community pins or emails unless needed.</p>
+
+<h2>3. Who we share data with</h2>
+<p>To provide the Service, your browser or our server sends the minimum data needed (map area, rounded coordinates or search text, plus the technical details every internet request carries such as IP address) to these service providers. We do not control their own processing; each has its own privacy policy.</p>
 <table>
-<tr><th>Data</th><th>Why</th><th>Where it is kept</th><th>How long</th></tr>
-<tr><td>Your location (GPS or approximate)</td><td>Centre the map, find nearby places, weather, pollution index, directions and alerts near you</td><td>In your browser only. Never stored on our servers.</td><td>Not kept</td></tr>
-<tr><td>Community pins: type (e.g. heavy rain), coordinates, time</td><td>Show live weather and hazard reports to other users</td><td>Our cloud database (Upstash Redis)</td><td>Deleted automatically when the pin expires (1 to 12 hours), or when you remove it</td></tr>
-<tr><td>Random device code</td><td>Lets only your device remove your own pins. It is not linked to your name, phone number or account.</td><td>Your browser (local storage). We store only a one-way hash of it with your pins.</td><td>Until you clear site data; the hash goes when the pin expires</td></tr>
-<tr><td>IP address (hashed)</td><td>Stop spam by limiting each network to 20 pins an hour</td><td>Our cloud database, as a one-way hash</td><td>1 hour</td></tr>
-<tr><td>Technical logs (IP address, browser type, time, page requested)</td><td>Run, secure and fix the Service</td><td>Our hosting provider, Vercel</td><td>According to Vercel's log retention</td></tr>
-<tr><td>Settings (language, your own pins when offline)</td><td>Remember your choices</td><td>Your browser only</td><td>Until you clear site data</td></tr>
+<tr><th>Provider</th><th>What for</th><th>Data involved</th></tr>
+<tr><td>Vercel Inc.</td><td>Hosting the website and our server functions</td><td>Technical logs</td></tr>
+<tr><td>Upstash Inc.</td><td>Community pin database</td><td>Pins, hashed device code, hashed IP (1 hour)</td></tr>
+<tr><td>OpenFreeMap</td><td>Map images</td><td>Map area being viewed</td></tr>
+<tr><td>Photon (Komoot)</td><td>Place search and area names</td><td>Search text, approximate coordinates</td></tr>
+<tr><td>Overpass API (OpenStreetMap)</td><td>Nearby places</td><td>Rounded coordinates, category</td></tr>
+<tr><td>OSRM</td><td>Driving directions</td><td>Start and destination coordinates</td></tr>
+<tr><td>Open-Meteo</td><td>Weather and pollution index</td><td>Rounded coordinates</td></tr>
+<tr><td>RainViewer</td><td>Rain radar images</td><td>Map area being viewed</td></tr>
+<tr><td>data.gov.my</td><td>Official alerts</td><td>None (requested by our server)</td></tr>
+<tr><td>Google Fonts</td><td>Text font</td><td>Technical request details</td></tr>
 </table>
-<p>We do not ask for your name, email, phone number or IC number, and we do not knowingly process sensitive personal data as defined in the PDPA.</p>
+<p><b>Transfer outside Malaysia.</b> Several of these providers run servers outside Malaysia, for example in the European Union, Singapore or the United States. By using the Service you consent to this transfer under section 129 of the PDPA. We choose providers that state they protect data and only send what each one needs.</p>
+<p><b>Legal requests.</b> We may disclose data if required by Malaysian law, a court order or a lawful request from a government authority, or where needed to protect someone's life or safety.</p>
+<p><b>No selling.</b> We never sell, rent or trade personal data, and we do not share it with advertisers or data brokers.</p>
 
-<h2>2. Notice and choice</h2>
+<h2>4. Your consent and choices</h2>
 <ul>
-<li><b>Location</b> is only used after your browser asks you and you allow it. You can say no or turn it off at any time in your browser or phone settings. The map will then use its centre instead.</li>
-<li><b>Community pins</b> are only created when you press a pin button. Do not include anything that identifies you or another person.</li>
-<li>By using the Service you agree to this policy. If you do not agree, please stop using it.</li>
+<li>By using the Service you agree to this Privacy Policy. If you do not agree, please stop using the Service.</li>
+<li><b>Location:</b> allow or block it at any time in your browser or phone settings.</li>
+<li><b>Community pins:</b> you choose whether to post one, and can remove it at any time.</li>
+<li><b>Everything on your device:</b> clear this site's data in your browser settings to delete your settings, device code and offline copy.</li>
+<li>You may withdraw your consent at any time by stopping use of the Service, clearing site data and, if needed, emailing us.</li>
 </ul>
 
-<h2>3. Disclosure to third parties</h2>
-<p>To work, your browser or our servers send the map area, search text or coordinates (not your name) to these service providers. Each has its own privacy policy.</p>
+<h2>5. How we protect your data</h2>
 <ul>
-<li>OpenFreeMap: map tiles</li>
-<li>Photon by Komoot: place search and area names</li>
-<li>Overpass API mirrors (OpenStreetMap data): nearby places</li>
-<li>OSRM: driving directions</li>
-<li>Open-Meteo: weather and air-quality data</li>
-<li>RainViewer: rain radar images</li>
-<li>data.gov.my (Government of Malaysia): flood, weather and earthquake alerts</li>
-<li>Vercel Inc.: website hosting</li>
-<li>Upstash Inc.: the community pin database</li>
-<li>Google Fonts: the text font</li>
+<li>The whole Service is served over encrypted HTTPS.</li>
+<li>Device codes and IP addresses are stored only as one-way hashes.</li>
+<li>Database access keys are server secrets and are never sent to your browser.</li>
+<li>Pins carry no name, account or contact detail, and expire automatically.</li>
+<li>We limit how many pins a network can post to prevent abuse.</li>
 </ul>
-<p><b>Transfer outside Malaysia.</b> Some of these providers process data on servers outside Malaysia. By using the Service you consent to this transfer, as allowed under section 129 of the PDPA. We only share what each provider needs.</p>
-<p>We may also disclose data when required by Malaysian law, a court order or a lawful request from the authorities. We never sell or rent personal data, and we do not use it for advertising.</p>
+<p>No method of storage or transmission is 100% secure. If we become aware of a data breach that affects you, we will act quickly to contain it and inform affected users and the authorities where the law requires.</p>
 
-<h2>4. Security</h2>
-<p>The site is only served over HTTPS. Device codes and IP addresses are stored as one-way hashes. Database keys are kept as server secrets and are never sent to your browser. No system is completely secure, but we take reasonable practical steps to protect data from loss, misuse and unauthorised access.</p>
+<h2>6. How long we keep data</h2>
+<table>
+<tr><th>Data</th><th>Kept for</th></tr>
+<tr><td>Location</td><td>Not kept by us</td></tr>
+<tr><td>Community pins</td><td>1 to 12 hours, or until you remove them</td></tr>
+<tr><td>Hashed IP for spam limits</td><td>1 hour</td></tr>
+<tr><td>Technical logs</td><td>According to Vercel's log retention</td></tr>
+<tr><td>Emails to us</td><td>Until your request is handled</td></tr>
+<tr><td>Data on your device</td><td>Until you clear site data</td></tr>
+</table>
 
-<h2>5. Retention</h2>
-<p>We keep personal data only as long as needed for the purpose in section 1. Community pins delete themselves when they expire, and the rate-limit record after 1 hour.</p>
+<h2>7. Keeping data accurate</h2>
+<p>Community pins are short-lived on purpose so that old reports disappear. If your pin is wrong, remove it with <b>Remove pin</b>. If you see a pin that is false or abusive, email us and we will remove it.</p>
 
-<h2>6. Data integrity</h2>
-<p>Community pins are short-lived on purpose so that stale reports disappear. If a pin is wrong, the device that posted it can remove it at any time.</p>
-
-<h2>7. Your rights and access</h2>
+<h2>8. Your rights</h2>
+<p>Under the PDPA you have the right to:</p>
 <ul>
-<li>Remove your pins at any time with <b>Remove pin</b> in the app.</li>
-<li>Delete everything NAVMAP stores on your device by clearing this site's data in your browser.</li>
-<li>Under the PDPA you may ask to access or correct your personal data, or withdraw consent. Because we do not know who you are, we can usually only act on a request that includes the pin or the time and place it was posted.</li>
+<li><b>access</b> the personal data we hold about you;</li>
+<li><b>correct</b> data that is inaccurate, incomplete or out of date;</li>
+<li><b>withdraw consent</b> to processing;</li>
+<li>ask us to <b>stop or limit</b> processing that causes you damage or distress; and</li>
+<li>ask us to stop using your data for direct marketing (we do not do any).</li>
 </ul>
+<p><b>How to ask:</b> email <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a> with the subject "NAVMAP personal data request". Because the Service has no accounts, we usually cannot tell who you are, so please include details such as the pin type, the time and the place you posted it. We will reply within 21 days, as the PDPA requires. We may need to confirm the request comes from you before acting on it.</p>
+<p><b>Complaints:</b> if you are not satisfied with our answer, you can complain to the Personal Data Protection Department (Jabatan Perlindungan Data Peribadi, JPDP) at <a href="https://www.pdp.gov.my" rel="noopener">www.pdp.gov.my</a>.</p>
 
-<h2>8. Cookies and local storage</h2>
-<p>NAVMAP does not use advertising or analytics cookies. It uses your browser's local storage for the settings in section 1, and a service worker to load the app faster and work with a weak signal.</p>
+<h2>9. Cookies and similar technology</h2>
+<p>NAVMAP does <b>not</b> use advertising, analytics or tracking cookies, and does not use tools such as Google Analytics or Facebook Pixel. It uses local storage and a service worker only for the purposes in section 2.9. Third-party providers listed in section 3 may receive standard technical information when your browser loads their content.</p>
 
-<h2>9. Children</h2>
-<p>The Service is for the general public and is not aimed at children under 13. Children should use it with a parent or guardian.</p>
+<h2>10. Children</h2>
+<p>The Service is meant for the general public and is not aimed at children under 13. Children should use it with a parent or guardian. If you believe a child has sent us personal data, email us and we will delete it.</p>
 
-<h2>10. Changes</h2>
-<p>We may update this policy. The effective date above will change, and important changes will be shown in the app.</p>
+<h2>11. Changes to this policy</h2>
+<p>We may update this Privacy Policy when the Service changes or the law requires. The "Last updated" date at the top will change, and important changes will be shown in the app. Using the Service after an update means you accept the updated policy.</p>
 
-<h2>11. Contact</h2>
-<p>Questions, requests or complaints about personal data: open an issue at <a href="https://github.com/YushAbdullah/NAVMAP/issues" rel="noopener">github.com/YushAbdullah/NAVMAP/issues</a> (do not post personal details there; ask for a private contact instead). If you are not satisfied with our answer, you may complain to the Personal Data Protection Department (JPDP) of Malaysia at <a href="https://www.pdp.gov.my" rel="noopener">pdp.gov.my</a>.</p>
+<h2>12. Contact us</h2>
+<p>For any question, request or complaint about this policy or your personal data:</p>
+<p><b>Yush Abdullah</b> (NAVMAP)<br>Email: <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a><br>Malaysia</p>
 
 <h2>Ringkasan (Bahasa Melayu)</h2>
-<p>NAVMAP tidak memerlukan akaun, tiada iklan dan tiada kuki penjejakan. Lokasi anda kekal dalam pelayar anda dan tidak disimpan oleh kami. Pin komuniti (jenis, lokasi, masa) disimpan sehingga tamat tempoh (1 hingga 12 jam) atau sehingga anda membuangnya. Kami tidak menjual data anda. Dasar ini mematuhi Akta Perlindungan Data Peribadi 2010. Jika terdapat percanggahan, versi Bahasa Inggeris terpakai.</p>
+<p>NAVMAP tidak memerlukan pendaftaran atau akaun, tiada iklan dan tiada kuki penjejakan. Lokasi anda diproses dalam telefon anda dan tidak disimpan di pelayan kami. Jika anda meletakkan pin komuniti, kami menyimpan jenis, lokasi dan masa pin itu sehingga tamat tempoh (1 hingga 12 jam) atau sehingga anda membuangnya. Untuk mengelak spam, alamat IP disimpan dalam bentuk cincang (hash) selama 1 jam sahaja. Panggilan SOS dibuat terus oleh telefon anda dan tidak direkodkan oleh kami. Kami tidak menjual data anda. Anda berhak mengakses, membetulkan dan menarik balik persetujuan di bawah Akta Perlindungan Data Peribadi 2010. Hubungi kami di <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a>; kami akan menjawab dalam tempoh 21 hari. Jika terdapat percanggahan, versi Bahasa Inggeris terpakai.</p>
 
-<footer>© 2026 NAVMAP by Yush Abdullah. All rights reserved. · <a href="/terms.html">Terms of Service</a> · Map data © OpenStreetMap contributors (ODbL)</footer>
+<footer>© 2026 NAVMAP by Yush Abdullah. All rights reserved. · <a href="/terms.html">Terms of Service</a> · <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a> · Map data © OpenStreetMap contributors (ODbL)</footer>
 </body></html>
