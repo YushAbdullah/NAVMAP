@@ -55,7 +55,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .chev { color: var(--text-muted); }
 
 /* ---------- FABs ---------- */
-.fabs { position: absolute; right: 16px; bottom: calc(var(--sheet-peek, 300px) + 16px); display: flex; flex-direction: column; gap: 8px; z-index: 4; transition: bottom 280ms var(--ease-out); }
+.fabs { position: absolute; left: 16px; right: 16px; bottom: calc(var(--sheet-peek, 300px) + 16px); top: var(--top-h, 180px); display: flex; flex-direction: column; flex-wrap: wrap-reverse; justify-content: flex-end; align-content: flex-start; gap: 8px; pointer-events: none; z-index: 4; transition: bottom 280ms var(--ease-out); }
 .fab { width: 44px; height: 44px; border: 0; border-radius: 12px; background: var(--surface); box-shadow: var(--e1); display: grid; place-items: center; }
 .fab[aria-pressed="false"] { color: var(--text-subtle); opacity: .7; }
 .fab.on { background: var(--ink); color: var(--primary); }
@@ -67,7 +67,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .sheet.peek .sheet-body { overflow: hidden; }
 .grab { touch-action: none; }
 @media (max-width: 899px) {
-  body.map-focus .banner { display: none; }
+  body.map-focus .banner, body.map-focus .news-bar { display: none; }
 }
 .grab { border: 0; background: transparent; padding: 10px 0 6px; display: grid; place-items: center; flex-shrink: 0; }
 .grab span { width: 40px; height: 4px; border-radius: 9999px; background: var(--border); }
@@ -157,7 +157,7 @@ button.row:hover { box-shadow: var(--e1); transform: translateY(-1px); }
 .hud-road:empty { display: none; }
 .hud-meta { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #D9E5DB; }
 body.navigating .top, body.navigating .sheet { display: none; }
-body.navigating .fabs { bottom: 24px; }
+body.navigating .fabs { bottom: 24px; top: 200px; }
 
 /* ---------- Dialog / toast ---------- */
 dialog { border: 0; border-radius: 24px; padding: 24px; width: min(420px, calc(100vw - 32px)); box-shadow: var(--e3); }
@@ -190,7 +190,7 @@ dialog h2 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
   .sheet, .sheet.expanded, .sheet.peek { left: 24px; right: auto; bottom: 24px; width: var(--sheet-w); top: var(--top-h, 200px); max-height: none; border-radius: 24px; box-shadow: var(--e3); }
   .grab { display: none; }
   .sheet-body { padding-top: 16px; }
-  .fabs { bottom: 24px; right: 24px; }
+  .fabs { bottom: 24px; right: 24px; left: auto; }
   .toast { bottom: 24px; left: calc(var(--sheet-w) + 48px + (100vw - var(--sheet-w) - 48px) / 2); }
   .hud { left: auto; right: 24px; top: 24px; width: 380px; }
   body.navigating .top { display: flex; }
@@ -336,3 +336,20 @@ body.navigating .sos-fab { bottom: 24px; }
 .news-tag.t-haze { color: #7B5B00; }
 .news-tag.t-weather { color: #1F6FB2; }
 .news-tag.t-climate { color: #B4540A; }
+
+.fabs > * { pointer-events: auto; }
+
+/* ---------- News ticker (above the alert banner) ---------- */
+.news-bar { display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 4px 0 6px; border-radius: 12px; background: var(--ink); color: #fff; box-shadow: var(--e2); }
+.news-bar[hidden] { display: none; }
+.news-bar-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 100%; border: 0; background: none; color: inherit; text-align: left; padding: 0; }
+.nb-tag { flex: none; padding: 3px 7px; border-radius: 6px; background: var(--primary); color: var(--ink); font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.nb-tag.t-disaster { background: #FF6B75; color: #2B0005; }
+.nb-tag.t-haze { background: #F2C94C; }
+.nb-tag.t-weather { background: #7CC4FF; }
+.nb-txt { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nb-txt.in { animation: nb-in 400ms var(--ease-out, ease-out); }
+@keyframes nb-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.nb-x { flex: none; width: 32px; height: 32px; border: 0; background: none; color: rgba(255,255,255,.7); display: grid; place-items: center; }
+.nb-x svg { width: 16px; height: 16px; }
+@media (prefers-reduced-motion: reduce) { .nb-txt.in { animation: none; } }
