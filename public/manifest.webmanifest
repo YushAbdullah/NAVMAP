@@ -1,0 +1,20 @@
+{
+  "name": "NAVMAP Malaysia",
+  "short_name": "NAVMAP",
+  "description": "Navigate Malaysia with live flood, weather and earthquake alerts.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F6FEF6",
+  "theme_color": "#F6FEF6",
+  "lang": "en-MY",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "EV charging nearby", "url": "/?cat=ev" },
+    { "name": "Fuel nearby", "url": "/?cat=fuel" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "navmap",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NAVMAP: Malaysia navigation and map with live emergency and weather alerts",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "maplibre-gl": "^5.24.0"
+  },
+  "devDependencies": {
+    "vite": "^6.4.5"
+  },
+  "engines": { "node": ">=18" }
+}

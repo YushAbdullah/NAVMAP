@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>NAVMAP · Malaysia live map</title>
+  <meta name="description" content="Navigate Malaysia with live flood, weather and earthquake alerts. Find EV chargers, fuel, food, toilets and surau near you.">
+  <meta name="theme-color" content="#F6FEF6">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <div id="map" role="region" aria-label="Map"></div>
+
+    <!-- Top: search, chips, alert banner -->
+    <div class="top">
+      <form class="search" id="search-form" role="search" autocomplete="off">
+        <span class="brand" aria-hidden="true"><i></i><i></i></span>
+        <label for="q" class="sr-only" data-i18n="searchLabel">Search places</label>
+        <input id="q" type="search" data-i18n-ph="searchPh" placeholder="Search places, address, EV…" enterkeyhint="search">
+        <button type="button" class="icon-btn" id="lang-btn" aria-label="Switch language">BM</button>
+      </form>
+      <ul class="results" id="results" role="listbox" hidden></ul>
+
+      <div class="chips" id="chips" role="toolbar" aria-label="Find nearby"></div>
+
+      <button class="banner" id="banner" hidden>
+        <span class="banner-ic" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        </span>
+        <span class="banner-txt"><b id="banner-title"></b><small id="banner-sub"></small></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+    </div>
+
+    <!-- Map controls -->
+    <div class="fabs">
+      <button class="fab" id="report-btn" aria-label="Report a hazard" data-i18n-aria="report">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V4h12l-1.5 4L16 12H4"/></svg>
+      </button>
+      <button class="fab" id="alerts-layer-btn" aria-label="Show alerts on map" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>
+      </button>
+      <button class="fab" id="locate-btn" aria-label="Centre on my location" data-i18n-aria="locate">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8-8-2z"/></svg>
+      </button>
+    </div>
+
+    <!-- Navigation HUD (active guidance) -->
+    <div class="hud" id="hud" hidden>
+      <div class="hud-step">
+        <span class="hud-ic" id="hud-ic" aria-hidden="true"></span>
+        <div><b id="hud-dist"></b><span id="hud-text"></span></div>
+      </div>
+      <div class="hud-meta"><span id="hud-eta"></span><button class="btn-danger" id="hud-stop" data-i18n="stop">End</button></div>
+    </div>
+
+    <!-- Bottom sheet -->
+    <section class="sheet" id="sheet" aria-live="polite">
+      <button class="grab" id="grab" aria-label="Expand or collapse panel"><span></span></button>
+      <div class="sheet-body" id="sheet-body"></div>
+      <nav class="tabs" aria-label="Main">
+        <button data-tab="explore" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg>
+          <span data-i18n="tabExplore">Explore</span>
+        </button>
+        <button data-tab="drive">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8-8-2z"/></svg>
+          <span data-i18n="tabDrive">Drive</span>
+        </button>
+        <button data-tab="alerts">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
+          <span data-i18n="tabAlerts">Alerts</span>
+          <em class="badge" id="badge" hidden>0</em>
+        </button>
+      </nav>
+    </section>
+
+    <!-- Report dialog -->
+    <dialog id="report-dlg" aria-labelledby="report-title">
+      <form method="dialog" id="report-form">
+        <h2 id="report-title" data-i18n="reportTitle">Report a hazard here</h2>
+        <p class="muted" data-i18n="reportHint">Your report is placed at the centre of the map.</p>
+        <div class="report-grid" id="report-grid"></div>
+        <div class="row-end">
+          <button value="cancel" class="btn-ghost" data-i18n="cancel">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
