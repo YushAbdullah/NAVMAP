@@ -531,7 +531,7 @@ function render() {
   });
   const body = $('#sheet-body');
   body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : (S.selected ? viewPlace() : viewExplore());
-  body.insertAdjacentHTML('beforeend', `<p class="copyright">${t('copyright')}</p>`);
+  body.insertAdjacentHTML('beforeend', `<p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a></p>`);
   syncLayout();
 }
 
@@ -995,7 +995,7 @@ function renderSos() {
     <div class="sos-loc"><small>${t('myCoords')}</small>${me ? `<div><b>${me}</b><button class="btn-ghost sm" data-sos-copy="${me}">${icon('copy')}${t('copy')}</button></div>` : `<p class="muted sm">${t('locUnknown')}</p>`}</div>
     ${groups}
     <p class="source">${t('sosNote')}</p>
-    <p class="copyright">${t('copyright')}</p>`;
+    <p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a></p>`;
 }
 $('#sos-btn').addEventListener('click', () => { renderSos(); sosDlg.showModal(); });
 $('#sos-close').addEventListener('click', () => sosDlg.close());

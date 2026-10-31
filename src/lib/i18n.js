@@ -1,6 +1,6 @@
 const STR = {
   en: {
-    copyright: '© 2026 NAVMAP by Yush Abdullah. All rights reserved.',
+    copyright: '© 2026 NAVMAP by Yush Abdullah. All rights reserved.', terms: 'Terms of Service', privacy: 'Privacy Policy',
     sosTitle: 'Emergency calls', sosLead: 'In danger? Call 999. Calls are free.', myCoords: 'Your location (read this to the operator)',
     copy: 'Copy', copied: 'Location copied', locUnknown: 'Location not found yet. Tap the arrow button on the map.', findWorkshop: 'Find a workshop nearby',
     whatsapp: 'WhatsApp', sosNote: 'Numbers checked October 2026. NAVMAP is not an emergency service.',
@@ -34,7 +34,7 @@ const STR = {
     arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
-    copyright: '© 2026 NAVMAP oleh Yush Abdullah. Hak cipta terpelihara.',
+    copyright: '© 2026 NAVMAP oleh Yush Abdullah. Hak cipta terpelihara.', terms: 'Terma Perkhidmatan', privacy: 'Dasar Privasi',
     sosTitle: 'Panggilan kecemasan', sosLead: 'Dalam bahaya? Hubungi 999. Panggilan percuma.', myCoords: 'Lokasi anda (bacakan kepada operator)',
     copy: 'Salin', copied: 'Lokasi disalin', locUnknown: 'Lokasi belum dijumpai. Tekan butang anak panah pada peta.', findWorkshop: 'Cari bengkel berdekatan',
     whatsapp: 'WhatsApp', sosNote: 'Nombor disemak Oktober 2026. NAVMAP bukan perkhidmatan kecemasan.',
