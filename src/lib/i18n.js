@@ -15,7 +15,7 @@ const STR = {
     noAlerts: 'No active alerts right now.', sample: 'Live feeds are unreachable, so you are seeing SAMPLE alerts. Do not rely on them.',
     sourceNote: 'Sources: JPS flood stations and MetMalaysia warnings via data.gov.my. NAVMAP is not an official warning service. In an emergency call 999. <a href="/privacy.html">Privacy & disclaimer</a>',
     updated: 'Updated', showOnMap: 'Show on map', away: 'away', reported: 'Thanks. Your report is on the map.',
-    geoDenied: 'Location is off. Using the map centre instead.', fastest: 'Fastest', alt: 'Alternative', safest: 'Avoids alerts',
+    geoDenied: 'Location is off. Using the map centre. Tip: open NAVMAP in Safari or Chrome and allow location.', fastest: 'Fastest', alt: 'Alternative', safest: 'Avoids alerts',
     arrived: 'You have arrived', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
@@ -34,7 +34,7 @@ const STR = {
     noAlerts: 'Tiada amaran aktif sekarang.', sample: 'Suapan langsung tidak dapat dicapai, jadi ini amaran CONTOH. Jangan bergantung padanya.',
     sourceNote: 'Sumber: stesen banjir JPS dan amaran MetMalaysia melalui data.gov.my. NAVMAP bukan perkhidmatan amaran rasmi. Kecemasan, hubungi 999. <a href="/privacy.html">Privasi & penafian</a>',
     updated: 'Dikemas kini', showOnMap: 'Lihat di peta', away: 'dari sini', reported: 'Terima kasih. Laporan anda di peta.',
-    geoDenied: 'Lokasi dimatikan. Menggunakan tengah peta.', fastest: 'Terpantas', alt: 'Alternatif', safest: 'Elak amaran',
+    geoDenied: 'Lokasi dimatikan. Menggunakan tengah peta. Tip: buka NAVMAP di Safari atau Chrome dan benarkan lokasi.', fastest: 'Terpantas', alt: 'Alternatif', safest: 'Elak amaran',
     arrived: 'Anda telah tiba', hours: 'Waktu', call: 'Hubungi', inMalaysia: 'Malaysia',
   },
 };
