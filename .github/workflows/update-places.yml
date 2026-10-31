@@ -32,5 +32,9 @@ jobs:
             echo "No changes"
           else
             git commit -m "Update places data from OpenStreetMap"
-            git push
+            # main may have moved while the build ran (it takes a few minutes): rebase and retry
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push && break
+              sleep $((i * 10))
+            done
           fi
