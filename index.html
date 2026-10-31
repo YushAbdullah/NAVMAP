@@ -40,7 +40,11 @@
 
     <!-- Map controls -->
     <div class="fabs">
-      <button class="fab" id="report-btn" aria-label="Report a hazard" data-i18n-aria="report">
+      <button class="fab wx-fab" id="wx-btn" hidden></button>
+      <button class="fab" id="radar-fab" aria-pressed="false" aria-label="Rain radar" data-i18n-aria="radarOn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12 19 5"/><path d="M19.4 9A8 8 0 1 1 15 4.6"/><path d="M15.5 10.5A4 4 0 1 1 13.5 8.5"/></svg>
+      </button>
+      <button class="fab" id="report-btn" aria-label="Pin weather or hazard" data-i18n-aria="report">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V4h12l-1.5 4L16 12H4"/></svg>
       </button>
       <button class="fab" id="alerts-layer-btn" aria-label="Show alerts on map" aria-pressed="true">
@@ -71,6 +75,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg>
           <span data-i18n="tabExplore">Explore</span>
         </button>
+        <button data-tab="weather">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z"/></svg>
+          <span data-i18n="tabWeather">Weather</span>
+        </button>
         <button data-tab="drive">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8-8-2z"/></svg>
           <span data-i18n="tabDrive">Drive</span>
@@ -86,8 +94,8 @@
     <!-- Report dialog -->
     <dialog id="report-dlg" aria-labelledby="report-title">
       <form method="dialog" id="report-form">
-        <h2 id="report-title" data-i18n="reportTitle">Report a hazard here</h2>
-        <p class="muted" data-i18n="reportHint">Your report is placed at the centre of the map.</p>
+        <h2 id="report-title" data-i18n="reportTitle">What's happening here?</h2>
+        <p class="muted" data-i18n="reportHint">Your pin is shown to everyone nearby. You can remove it any time.</p>
         <div class="report-grid" id="report-grid"></div>
         <div class="row-end">
           <button value="cancel" class="btn-ghost" data-i18n="cancel">Cancel</button>
