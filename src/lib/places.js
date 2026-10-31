@@ -1,8 +1,12 @@
 // Nearby places from OpenStreetMap via the Overpass API (free, no key).
 import { distKm } from './geo.js';
 
-const ENDPOINTS = [
+// Public Overpass mirrors (all allow browser CORS). We query them in parallel and use
+// whichever answers first, because any single mirror can be slow or overloaded.
+export const OVERPASS = [
   'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
 
@@ -15,38 +19,86 @@ export const CATEGORIES = {
   hospital: { en: 'Hospitals & clinics', bm: 'Hospital & klinik', short: { en: 'Hospitals', bm: 'Hospital' }, q: 'nwr["amenity"~"^(hospital|clinic)$"]' },
 };
 
-const cache = new Map();
+export const RADIUS_M = 4000;
 
-export async function fetchNearby(cat, center, radiusM = 4000, signal) {
-  const key = `${cat}:${center[1].toFixed(3)},${center[0].toFixed(3)}:${radiusM}`;
-  if (cache.has(key)) return cache.get(key);
-  const c = CATEGORIES[cat];
-  const query = `[out:json][timeout:20];(${c.q}(around:${radiusM},${center[1]},${center[0]}););out center tags 80;`;
-  let lastErr;
-  for (const url of ENDPOINTS) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        body: new URLSearchParams({ data: query }),
-        signal,
-      });
-      if (!res.ok) throw new Error(`Overpass ${res.status}`);
-      const json = await res.json();
-      const list = (json.elements || [])
-        .map((el) => toPlace(el, cat, center))
-        .filter(Boolean)
-        .sort((a, b) => a.distKm - b.distKm);
-      cache.set(key, list);
-      return list;
-    } catch (e) {
-      if (e.name === 'AbortError') throw e;
-      lastErr = e;
-    }
-  }
-  throw lastErr;
+/** Snap a centre to a ~1 km grid so nearby requests share a cache entry. */
+export const snap = (v) => Math.round(v * 100) / 100;
+
+export function overpassQuery(cat, lat, lon, radiusM = RADIUS_M) {
+  return `[out:json][timeout:12];(${CATEGORIES[cat].q}(around:${radiusM},${lat},${lon}););out center tags 60;`;
 }
 
-function toPlace(el, cat, center) {
+/** Race all mirrors; resolve with the first good JSON answer. */
+export async function raceOverpass(query, { timeoutMs = 9000, signal, fetchImpl = fetch } = {}) {
+  const ctrls = OVERPASS.map(() => new AbortController());
+  const abortAll = () => ctrls.forEach((c) => c.abort());
+  signal?.addEventListener('abort', abortAll);
+  const timer = setTimeout(abortAll, timeoutMs);
+  try {
+    return await Promise.any(OVERPASS.map(async (url, i) => {
+      const res = await fetchImpl(url, { method: 'POST', body: new URLSearchParams({ data: query }), signal: ctrls[i].signal });
+      if (!res.ok) throw new Error(`Overpass ${res.status}`);
+      const json = await res.json();
+      if (!Array.isArray(json.elements) || (!json.elements.length && /error|timed out/i.test(json.remark || ''))) throw new Error('Overpass error');
+      return json;
+    }));
+  } catch (e) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    throw e instanceof AggregateError ? new Error('All Overpass mirrors failed or timed out') : e;
+  } finally {
+    clearTimeout(timer);
+    abortAll(); // cancel the slower mirrors
+    signal?.removeEventListener('abort', abortAll);
+  }
+}
+
+/** Fetch places for a category around a snapped centre: our cached API first, then mirrors directly. */
+async function loadRaw(cat, lat, lon, signal) {
+  try {
+    const ctrl = new AbortController();
+    const stop = () => ctrl.abort();
+    signal?.addEventListener('abort', stop);
+    const timer = setTimeout(stop, 9500);
+    try {
+      const res = await fetch(`/api/places?cat=${cat}&lat=${lat}&lon=${lon}`, { signal: ctrl.signal });
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('json')) {
+        const d = await res.json();
+        if (Array.isArray(d.places)) return d.places;
+      }
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', stop);
+    }
+  } catch (e) {
+    if (signal?.aborted) throw e;
+  }
+  const json = await raceOverpass(overpassQuery(cat, lat, lon), { signal });
+  return json.elements.map((el) => toPlace(el, cat)).filter(Boolean);
+}
+
+const cache = new Map();
+
+export async function fetchNearby(cat, center, signal) {
+  const lat = snap(center[1]), lon = snap(center[0]);
+  const key = `${cat}:${lat},${lon}`;
+  if (!cache.has(key)) {
+    const p = loadRaw(cat, lat, lon, signal);
+    cache.set(key, p);
+    p.catch(() => cache.delete(key));
+  }
+  const list = await cache.get(key);
+  return list
+    .map((p) => ({ ...p, distKm: distKm(center, [p.lon, p.lat]) }))
+    .sort((a, b) => a.distKm - b.distKm);
+}
+
+/** Warm the cache in the background (e.g. right after we know where the user is). */
+export function prefetchNearby(cats, center) {
+  for (const c of cats) fetchNearby(c, center).catch(() => {});
+}
+
+export function toPlace(el, cat) {
   const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
   if (lat == null || lon == null) return null;
   const t = el.tags || {};
@@ -81,6 +133,5 @@ function toPlace(el, cat, center) {
     hours: t.opening_hours || '',
     phone: t.phone || t['contact:phone'] || '',
     website: t.website || t['contact:website'] || '',
-    distKm: distKm(center, [lon, lat]),
   };
 }

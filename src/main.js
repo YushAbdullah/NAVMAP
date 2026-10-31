@@ -5,7 +5,7 @@ import './style.css';
 import { t, L, getLang, setLang, applyStatic } from './lib/i18n.js';
 import { icon, maneuverIcon } from './lib/icons.js';
 import { distKm, distToLineKm, fmtDist, fmtDur, fmtAgo, circle, KL, MY_BBOX } from './lib/geo.js';
-import { CATEGORIES, fetchNearby } from './lib/places.js';
+import { CATEGORIES, fetchNearby, prefetchNearby } from './lib/places.js';
 import { searchPlaces } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
 import { loadAlerts } from './lib/alerts.js';
@@ -180,16 +180,46 @@ async function drawRoutes() {
 function center() { const c = map.getCenter(); return [c.lng, c.lat]; }
 function origin() { return S.me || center(); }
 
+// Location: a fast coarse fix first (cell/Wi-Fi, usually < 1 s), then refine with GPS.
+let locating = null;
+let refineWatch = null;
+function setMe(pos, fly) {
+  const first = !S.me;
+  S.me = [pos.coords.longitude, pos.coords.latitude];
+  drawMe();
+  if (fly && first) map.flyTo({ center: S.me, zoom: Math.max(map.getZoom(), 14), duration: 700 });
+  if (first) {
+    prefetchNearby(['ev', 'fuel'], S.me);
+    // results were loaded for the default map centre: reload them for the real location
+    if (S.cat && S.placesCenter && distKm(S.placesCenter, S.me) > 2) loadPlaces(S.cat);
+  }
+}
+
 function locate({ fly = true, quiet = false } = {}) {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) { if (!quiet) toast(t('geoDenied')); resolve(null); return; }
-    navigator.geolocation.getCurrentPosition((pos) => {
-      S.me = [pos.coords.longitude, pos.coords.latitude];
-      drawMe();
-      if (fly) map.flyTo({ center: S.me, zoom: Math.max(map.getZoom(), 14), duration: 900 });
-      resolve(S.me);
-    }, () => { if (!quiet) toast(t('geoDenied')); resolve(null); }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  if (!navigator.geolocation) { if (!quiet) toast(t('geoDenied')); return Promise.resolve(null); }
+  if (!fly && locating) return locating;
+  locating = new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setMe(pos, fly); if (fly && S.me) map.flyTo({ center: S.me, zoom: Math.max(map.getZoom(), 14), duration: 700 }); finish(S.me); },
+      () => { if (!quiet && !S.me) toast(t('geoDenied')); finish(S.me); },
+      { enableHighAccuracy: false, timeout: 6000, maximumAge: 10 * 60 * 1000 });
+    // refine with GPS for up to 30 s
+    if (refineWatch == null) {
+      refineWatch = navigator.geolocation.watchPosition((pos) => {
+        setMe(pos, fly);
+        finish(S.me);
+        if (pos.coords.accuracy < 50) stopRefine();
+      }, () => stopRefine(), { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+      setTimeout(stopRefine, 30000);
+    }
   });
+  return locating;
+}
+function stopRefine() {
+  if (refineWatch != null && !S.nav) navigator.geolocation.clearWatch(refineWatch);
+  refineWatch = null;
 }
 
 // ---------------------------------------------------------------- data actions
@@ -202,10 +232,14 @@ async function loadPlaces(cat) {
   placesAbort?.abort();
   placesAbort = new AbortController();
   S.placesStatus = 'loading'; render();
-  const c = center();
+  // if location is still being detected, give it a moment so we search the right area
+  if (!S.me && locating) await Promise.race([locating, new Promise((r) => setTimeout(r, 2000))]);
+  const signal = placesAbort.signal;
+  if (signal.aborted) return;
+  const c = S.me && distKm(S.me, center()) < 3 ? S.me : center();
   S.placesCenter = c;
   try {
-    const list = await fetchNearby(cat, c, 4000, placesAbort.signal);
+    const list = await fetchNearby(cat, c, signal);
     // distance from the person, if we know where they are
     if (S.me) list.forEach((p) => { p.distKm = distKm(S.me, [p.lon, p.lat]); });
     list.sort((a, b) => a.distKm - b.distKm);

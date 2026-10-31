@@ -26,8 +26,9 @@ const myTime = (s) => {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 
-export function normalizeFlood(rows) {
+export function normalizeFlood(rows, now = Date.now()) {
   if (!Array.isArray(rows)) return [];
+  const maxAge = 24 * 3600 * 1000; // ignore stations that have not reported in a day
   const sev = { DANGER: 'danger', WARNING: 'danger', ALERT: 'warning' };
   return rows
     .filter((r) => sev[String(r.water_level_indicator || '').toUpperCase()])
@@ -61,7 +62,7 @@ export function normalizeFlood(rows) {
         source: 'JPS · data.gov.my',
       };
     })
-    .filter((a) => a.lat != null && a.lon != null);
+    .filter((a) => a.lat != null && a.lon != null && a.time && now - new Date(a.time).getTime() < maxAge);
 }
 
 export function normalizeWeather(rows, now = Date.now()) {
@@ -69,6 +70,8 @@ export function normalizeWeather(rows, now = Date.now()) {
   return rows
     .filter((r) => {
       const to = myTime(r.valid_to);
+      const heading = `${r.heading_en || ''} ${r.warning_issue?.title_en || ''}`;
+      if (/no advisory|tiada (nasihat|amaran)/i.test(heading)) return false;
       return !to || new Date(to).getTime() > now;
     })
     .map((r, i) => {
@@ -95,31 +98,52 @@ export function normalizeWeather(rows, now = Date.now()) {
     });
 }
 
+// Reference points across Malaysia, used to judge how relevant an earthquake is.
+const MY_POINTS = [[100.33, 5.41], [101.69, 3.14], [103.76, 1.49], [103.33, 3.81], [110.35, 1.55], [113.04, 3.17], [116.07, 5.98], [118.61, 4.48]];
+const kmTo = (lon, lat) => Math.min(...MY_POINTS.map(([x, y]) => {
+  const r = Math.PI / 180, dLat = (lat - y) * r, dLon = (lon - x) * r;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(y * r) * Math.cos(lat * r) * Math.sin(dLon / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(s));
+}));
+
 export function normalizeQuake(rows, now = Date.now()) {
   if (!Array.isArray(rows)) return [];
   const weekMs = 7 * 24 * 3600 * 1000;
+  const seen = new Set();
   return rows
     .filter((r) => r.visible !== false)
     .map((r) => {
       const mag = num(r.magdefault);
+      const lat = num(r.lat), lon = num(r.lon);
       const time = r.utcdatetime ? new Date(`${r.utcdatetime}Z`).toISOString() : myTime(r.localdatetime);
+      const km = lat != null && lon != null ? kmTo(lon, lat) : Infinity;
+      // Likely felt in Malaysia: strong and close. Otherwise informational.
+      const severity = mag != null && ((mag >= 5 && km < 300) || (mag >= 6.5 && km < 800)) ? 'danger'
+        : mag != null && ((mag >= 4 && km < 300) || (mag >= 5.5 && km < 800)) ? 'warning' : 'info';
       return {
-        id: `eq-${r.utcdatetime}-${r.lat}-${r.lon}`,
+        id: `eq-${r.utcdatetime}-${lat}-${lon}`,
         kind: 'quake',
-        severity: mag != null && mag >= 6 ? 'danger' : mag != null && mag >= 4.5 ? 'warning' : 'info',
+        severity,
         title: `Earthquake M${mag ?? '?'}`,
         title_bm: `Gempa bumi M${mag ?? '?'}`,
         place: r.location_original || r.location || '',
         desc: [r.n_distancemas, r.depth != null ? `depth ${r.depth} km` : ''].filter(Boolean).join(' · '),
         desc_bm: [r.nbm_distancemas, r.depth != null ? `kedalaman ${r.depth} km` : ''].filter(Boolean).join(' · '),
-        lat: num(r.lat), lon: num(r.lon),
+        lat, lon,
         radiusKm: mag ? Math.min(60, mag * 8) : 20,
-        mag,
+        mag, kmFromMalaysia: Math.round(km),
         time,
         source: 'MetMalaysia · data.gov.my',
       };
     })
-    .filter((a) => a.time && now - new Date(a.time).getTime() < weekMs);
+    // only quakes within 1,500 km of Malaysia, from the last 7 days, no duplicates
+    .filter((a) => {
+      if (!a.time || now - new Date(a.time).getTime() > weekMs || a.kmFromMalaysia > 1500) return false;
+      const k = `${a.time.slice(0, 16)}|${a.mag}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
 }
 
 const sevRank = { danger: 0, warning: 1, info: 2 };
