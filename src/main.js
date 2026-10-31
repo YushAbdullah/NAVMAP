@@ -553,13 +553,26 @@ function viewExplore() {
   const c = CATEGORIES[S.cat];
   const head = `<div class="sh-head"><h2>${esc(c[getLang()])} ${t('nearby').toLowerCase()}</h2>${S.places.length > 3 ? `<button class="link" data-action="toggle-all">${S.showAll ? t('showLess') : `${t('seeAll')} (${S.places.length})`}</button>` : ''}</div>`;
   if (S.placesStatus === 'loading') return `${head}<div class="empty-state"><span class="spinner"></span>${t('loading')}</div>`;
-  if (S.placesStatus === 'error') return `${head}<div class="empty-state">${icon('search')}${t('failed')}<button class="btn-ghost" data-action="retry">${t('retry')}</button></div>`;
-  if (S.placesStatus === 'empty') return `${head}<div class="empty-state">${icon('search')}${t('none')}<button class="btn-ghost" data-action="retry">${t('searchArea')}</button></div>`;
+  if (S.placesStatus === 'error') return `${head}<div class="empty-state">${icon('search')}${t('failed')}<button class="btn-ghost" data-action="retry">${t('retry')}</button>${gmapsBtn(S.cat)}</div>`;
+  if (S.placesStatus === 'empty') return `${head}<div class="empty-state">${icon('search')}${t('none')}<button class="btn-ghost" data-action="retry">${t('searchArea')}</button>${gmapsBtn(S.cat)}</div>`;
   const list = S.showAll ? S.places : S.places.slice(0, 3);
   const first = S.places[0];
   return `${head}<ul class="list">${list.map(placeRow).join('')}</ul>
-    <div class="btns"><button class="btn" data-action="go" data-place="${esc(first.id)}">${icon('nav')}${t('directions')}: ${esc(first.name)}</button></div>`;
+    <div class="btns"><button class="btn" data-action="go" data-place="${esc(first.id)}">${icon('nav')}${t('directions')}: ${esc(first.name)}</button></div>
+    <p class="gmaps-row">${t('gmapsMore')} ${gmapsBtn(S.cat)}</p>`;
 }
+
+// "Search on Google Maps" hand-off: opens Google Maps (app or web) searching this category near the
+// area being viewed. Uses the official Maps URLs, so no API key, no cost, and no Google data on our map.
+const GMAPS_Q = {
+  ev: 'EV charging station', fuel: 'petrol station', food: 'fast food', toilet: 'public toilet',
+  surau: 'surau masjid', hospital: 'hospital klinik', workshop: 'car workshop bengkel kereta',
+};
+function gmapsSearchUrl(cat) {
+  const c = S.placesCenter || center();
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${GMAPS_Q[cat] || CATEGORIES[cat].en} near ${c[1].toFixed(5)},${c[0].toFixed(5)}`)}`;
+}
+const gmapsBtn = (cat) => `<a class="btn-ghost gmaps" href="${gmapsSearchUrl(cat)}" target="_blank" rel="noopener">${icon('search')}${t('gmapsSearch')}</a>`;
 
 function quickGrid() {
   return `<div class="report-grid" style="margin-top:14px">${Object.entries(CATEGORIES).map(([k, c]) =>
@@ -583,6 +596,7 @@ function viewPlace() {
       <button class="btn" data-action="go" data-place="${esc(p.id)}">${icon('nav')}${t('directions')}</button>
       ${p.phone ? `<a class="btn-ghost" style="display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;flex:0 0 auto" href="tel:${esc(p.phone.replace(/\s/g, ''))}">${icon('phone')}${t('call')}</a>` : ''}
     </div>
+    <p class="gmaps-row"><a class="btn-ghost gmaps" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${p.name} ${p.lat},${p.lon}`)}" target="_blank" rel="noopener">${icon('search')}${t('gmapsPlace')}</a></p>
   </div>`;
 }
 

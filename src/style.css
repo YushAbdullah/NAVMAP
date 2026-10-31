@@ -378,3 +378,9 @@ body.navigating .sos-fab { bottom: 24px; }
 .btn.sm { width: auto; flex: none; }
 #sub-form .row-end { gap: 8px; margin-top: 8px; }
 #sub-form .row-end .btn { width: auto; height: 44px; font-size: 15px; }
+
+/* ---------- Google Maps hand-off ---------- */
+.btn-ghost.gmaps { display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; color: var(--text); }
+.btn-ghost.gmaps svg { width: 16px; height: 16px; }
+.gmaps-row { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 12px 0 0; font-size: 13px; color: var(--text-muted); }
+.empty-state .gmaps { margin-top: 8px; }
