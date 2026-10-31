@@ -52,7 +52,7 @@ HTTPS matters: browsers only allow GPS location on secure sites.
 - **Search and Overpass:** both are community services with fair-use policies. For high traffic, self-host Photon/Nominatim and Overpass, or move to a paid places API.
 - **Shared hazard reports:** reports are local-only right now. Next step is a backend (Supabase or Firebase) with moderation so everyone sees reports, plus push notifications for alerts near saved places.
 - **Haze (API/IPU):** not yet connected; DOE does not publish an open API. Possible sources: data.gov.my datasets or an agreement with DOE.
-- **Legal:** finish `public/privacy.html` (PDPA 2010 notice, contact email) and keep the "not an official warning service" disclaimer.
+- **Legal:** `public/terms.html` and `public/privacy.html` (PDPA 2010) are templates written for this app; have a Malaysian lawyer review them, and add a contact email if you prefer it to GitHub issues.
 
 ## Turn on shared community pins (one time)
 
@@ -79,7 +79,11 @@ src/lib/routing.js      OSRM routes + BM/EN step text
 src/lib/reports.js      local hazard reports
 src/lib/i18n.js         BM / EN strings
 api/alerts.js           Vercel serverless proxy with 5-minute edge cache
-public/                 manifest, service worker, icons, privacy page
+public/                 manifest, service worker, icons, Terms of Service and Privacy Policy pages
 ```
 
 Map data © OpenStreetMap contributors. NAVMAP is not an official warning service. In an emergency call 999.
+
+## Copyright
+
+© 2026 Yush Abdullah. All rights reserved. See [LICENSE](LICENSE). Map, weather and alert data remain the property of their providers (OpenStreetMap contributors, Open-Meteo, RainViewer, data.gov.my).

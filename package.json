@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "NAVMAP: Malaysia navigation and map with live emergency and weather alerts",
+  "author": "Yush Abdullah",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "vite",

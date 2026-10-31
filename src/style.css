@@ -316,3 +316,5 @@ body.navigating .sos-fab { bottom: 24px; }
 .muted.sm { font-size: 12px; line-height: 1.45; }
 .btn-ghost.sm svg { width: 16px; height: 16px; }
 .sos-loc .btn-ghost { display: inline-flex; align-items: center; gap: 6px; }
+.copyright { margin: 18px 0 4px; font-size: 11px; color: var(--text-subtle); text-align: center; }
+.copyright a { color: var(--success); }
