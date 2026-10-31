@@ -22,6 +22,7 @@ It is a Progressive Web App (PWA): it works in any browser and can be installed 
 | Pollution index (0 clean to 300+ worst, 6 levels, PM2.5/PM10/O₃/NO₂/SO₂/CO, 24 h peak) | [Open-Meteo air quality](https://open-meteo.com/en/docs/air-quality-api) (CAMS model, US AQI scale); official DOE readings linked | Free, no key |
 | Emergency calls (SOS button): Government, Car problem, NGOs, plus your coordinates | `src/lib/hotlines.js`, numbers checked Oct 2026 | – |
 | Nature & climate news (Malaysia + world, topic filters) | `api/news.js` reads public RSS feeds (Google News EN/BM, Malay Mail, The Star, Guardian, BBC, UN News, Mongabay), 15-min edge cache | Free |
+| Email updates sign-up (unticked PDPA consent box, unsubscribe) | `api/subscribe.js` → Upstash hash `navmap:subs`; owner export: set `ADMIN_KEY` in Vercel, then open `/api/subscribe?export=csv&key=<ADMIN_KEY>` | Free tier |
 | Car workshops & tyre shops nearby | Overpass (`shop=car_repair`/`tyres`) | Free, no key |
 | BM / EN | Toggle in the search bar | – |
 

@@ -534,7 +534,7 @@ function render() {
   });
   const body = $('#sheet-body');
   body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : S.tab === 'news' ? viewNews() : (S.selected ? viewPlace() : viewExplore());
-  body.insertAdjacentHTML('beforeend', `<p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a></p>`);
+  body.insertAdjacentHTML('beforeend', `<p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`);
   syncLayout();
 }
 
@@ -548,7 +548,7 @@ function placeRow(p) {
 
 function viewExplore() {
   if (!S.cat) {
-    return `<div class="sh-head"><h2>${t('pickCat')}</h2></div><p class="muted">${t('pickCatHint')}</p>${quickGrid()}`;
+    return `<div class="sh-head"><h2>${t('pickCat')}</h2></div><p class="muted">${t('pickCatHint')}</p>${quickGrid()}<div class="sub-card"><span class="sub-ic">${icon('mail')}</span><span class="mid"><b>${t('subTitle')}</b><small>${t('subCard')}</small></span><button class="btn sm" data-action="subscribe">${t('subBtn')}</button></div>`;
   }
   const c = CATEGORIES[S.cat];
   const head = `<div class="sh-head"><h2>${esc(c[getLang()])} ${t('nearby').toLowerCase()}</h2>${S.places.length > 3 ? `<button class="link" data-action="toggle-all">${S.showAll ? t('showLess') : `${t('seeAll')} (${S.places.length})`}</button>` : ''}</div>`;
@@ -869,7 +869,7 @@ function viewNews() {
       </span>
       ${n.image ? `<img src="${esc(n.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
     </a></li>`).join('')}</ul>` : `<div class="empty-state">${icon('leaf')}${t('newsNone')}</div>`;
-  return `${head}<div class="filters" role="group">${regions}</div><div class="filters topics" role="group">${topics}</div>${rows}<p class="source">${t('newsSource')}</p>`;
+  return `${head}<div class="filters" role="group">${regions}</div><div class="filters topics" role="group">${topics}</div>${rows}<div class="sub-card"><span class="sub-ic">${icon('mail')}</span><span class="mid"><b>${t('subTitle')}</b><small>${t('subCard')}</small></span><button class="btn sm" data-action="subscribe">${t('subBtn')}</button></div><p class="source">${t('newsSource')}</p>`;
 }
 
 // ---------------------------------------------------------------- layout sync
@@ -973,6 +973,7 @@ document.addEventListener('click', (e) => {
   if (act === 'radar') toggleRadar();
   if (act === 'wx-retry') loadWeather(true);
   if (act === 'news-retry') loadNews(true);
+  if (act === 'subscribe') openSubscribe();
   if (act === 'poll-jump') $('#poll')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
@@ -1064,6 +1065,57 @@ $('#report-grid').addEventListener('click', async (e) => {
 });
 $('#wx-btn').addEventListener('click', () => { openSheet(); setTab('weather'); });
 
+// Email updates sign-up: explicit, unticked consent box (PDPA); stored by /api/subscribe.
+const subDlg = $('#sub-dlg');
+let subMode = 'subscribe';
+function setSubMode(mode) {
+  subMode = mode;
+  const unsub = mode === 'unsubscribe';
+  $('#sub-title').textContent = unsub ? t('subUnsubTitle') : t('subTitle');
+  $('#sub-form .muted').textContent = unsub ? t('subUnsubLead') : t('subLead');
+  $('#sub-consent').closest('label').hidden = unsub;
+  $('#sub-submit').textContent = unsub ? t('subUnsubBtn') : t('subBtn');
+  $('#sub-unsub').textContent = unsub ? t('subBackLink') : t('subUnsubLink');
+  $('#sub-msg').textContent = ''; $('#sub-msg').className = 'sub-msg';
+  syncSubBtn();
+}
+function syncSubBtn() {
+  const okEmail = /^\S+@\S+\.\S+$/.test($('#sub-email').value.trim());
+  $('#sub-submit').disabled = !okEmail || (subMode === 'subscribe' && !$('#sub-consent').checked);
+}
+function openSubscribe() {
+  $('#sub-consent').checked = false;
+  $('#sub-consent-txt').innerHTML = t('subConsent');
+  setSubMode('subscribe');
+  subDlg.showModal();
+}
+$('#sub-email').addEventListener('input', syncSubBtn);
+$('#sub-consent').addEventListener('change', syncSubBtn);
+$('#sub-cancel').addEventListener('click', () => subDlg.close());
+$('#sub-unsub').addEventListener('click', () => setSubMode(subMode === 'subscribe' ? 'unsubscribe' : 'subscribe'));
+$('#sub-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('#sub-msg');
+  const email = $('#sub-email').value.trim();
+  const body = subMode === 'unsubscribe'
+    ? { email, action: 'unsubscribe' }
+    : { email, consent: $('#sub-consent').checked, lang: getLang(), consentText: $('#sub-consent-txt').textContent.trim() };
+  $('#sub-submit').disabled = true;
+  try {
+    const r = await fetch('/api/subscribe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'server');
+    msg.className = 'sub-msg ok';
+    msg.textContent = subMode === 'unsubscribe' ? t('subUnsubDone') : t('subDone');
+    if (subMode === 'subscribe') { try { localStorage.setItem('navmap.subscribed', '1'); } catch { /* ignore */ } }
+    setTimeout(() => subDlg.close(), 2200);
+  } catch (err) {
+    msg.className = 'sub-msg err';
+    msg.textContent = err.message === 'invalid_email' ? t('subBadEmail') : err.message === 'rate' ? t('subRate') : t('subFailed');
+    syncSubBtn();
+  }
+});
+
 // Emergency calls: Government, Car problem, NGOs, plus your coordinates to read to the operator.
 const sosDlg = $('#sos-dlg');
 function renderSos() {
@@ -1082,7 +1134,7 @@ function renderSos() {
     <div class="sos-loc"><small>${t('myCoords')}</small>${me ? `<div><b>${me}</b><button class="btn-ghost sm" data-sos-copy="${me}">${icon('copy')}${t('copy')}</button></div>` : `<p class="muted sm">${t('locUnknown')}</p>`}</div>
     ${groups}
     <p class="source">${t('sosNote')}</p>
-    <p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a></p>`;
+    <p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`;
 }
 $('#sos-btn').addEventListener('click', () => { renderSos(); sosDlg.showModal(); });
 $('#sos-close').addEventListener('click', () => sosDlg.close());

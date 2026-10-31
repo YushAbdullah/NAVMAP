@@ -118,6 +118,23 @@
       </form>
     </dialog>
 
+    <!-- Email updates sign-up -->
+    <dialog id="sub-dlg" aria-labelledby="sub-title">
+      <form id="sub-form" novalidate>
+        <h2 id="sub-title" data-i18n="subTitle">Get NAVMAP updates</h2>
+        <p class="muted" data-i18n="subLead">News about new features, safety tips and future NAVMAP campaigns, by email. No spam.</p>
+        <label class="sub-field"><span data-i18n="subEmail">Email address</span>
+          <input type="email" id="sub-email" autocomplete="email" inputmode="email" required placeholder="nama@contoh.com"></label>
+        <label class="sub-consent"><input type="checkbox" id="sub-consent"> <span id="sub-consent-txt"></span></label>
+        <p class="sub-msg" id="sub-msg" role="status"></p>
+        <div class="row-end">
+          <button type="button" class="btn-ghost" id="sub-cancel" data-i18n="cancel">Cancel</button>
+          <button type="submit" class="btn" id="sub-submit" disabled data-i18n="subBtn">Subscribe</button>
+        </div>
+        <p class="sub-foot"><button type="button" class="linkish" id="sub-unsub" data-i18n="subUnsubLink">Unsubscribe an email</button></p>
+      </form>
+    </dialog>
+
     <!-- Emergency calls -->
     <dialog id="sos-dlg" class="sos-dlg" aria-labelledby="sos-title">
       <div class="sos-head">

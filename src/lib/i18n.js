@@ -1,5 +1,10 @@
 const STR = {
   en: {
+    subTitle: 'Get NAVMAP updates', subLead: 'News about new features, safety tips and future NAVMAP campaigns, by email. No spam.', subEmail: 'Email address',
+    subConsent: 'I agree that Yush Abdullah (NAVMAP) may store my email address and send me NAVMAP news, updates and future campaigns. I can unsubscribe at any time. See the <a href="/privacy.html" target="_blank">Privacy Policy</a>.',
+    subBtn: 'Subscribe', subLink: 'Subscribe', subCard: 'Updates and campaigns by email. Unsubscribe any time.',
+    subDone: 'Thank you! You are subscribed.', subFailed: 'Could not subscribe right now. Please try again.', subBadEmail: 'Please enter a valid email address.', subRate: 'Too many tries. Please try again later.',
+    subUnsubLink: 'Unsubscribe an email', subUnsubTitle: 'Unsubscribe', subUnsubLead: 'Enter the email address to remove from NAVMAP updates.', subUnsubBtn: 'Unsubscribe', subUnsubDone: 'Done. That email will not receive NAVMAP emails.', subBackLink: 'Back to subscribe',
     tabNews: 'News', newsTitle: 'Nature & climate news', newsLead: 'Live headlines about floods, weather, haze, climate and nature, from Malaysia and around the world.',
     newsLoading: 'Loading the latest news…', newsFailed: 'Could not load the news right now.', newsNone: 'No news for this filter yet.',
     newsLocal: 'Malaysia', newsWorld: 'World', allTopics: 'All topics',
@@ -39,6 +44,11 @@ const STR = {
     arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
+    subTitle: 'Dapatkan berita NAVMAP', subLead: 'Berita ciri baharu, tip keselamatan dan kempen NAVMAP akan datang melalui e-mel. Tiada spam.', subEmail: 'Alamat e-mel',
+    subConsent: 'Saya bersetuju Yush Abdullah (NAVMAP) menyimpan alamat e-mel saya dan menghantar berita, kemas kini dan kempen NAVMAP akan datang. Saya boleh berhenti melanggan pada bila-bila masa. Lihat <a href="/privacy.html" target="_blank">Dasar Privasi</a>.',
+    subBtn: 'Langgan', subLink: 'Langgan', subCard: 'Kemas kini dan kempen melalui e-mel. Berhenti bila-bila masa.',
+    subDone: 'Terima kasih! Anda telah melanggan.', subFailed: 'Tidak dapat melanggan sekarang. Sila cuba lagi.', subBadEmail: 'Sila masukkan alamat e-mel yang sah.', subRate: 'Terlalu banyak cubaan. Sila cuba sebentar lagi.',
+    subUnsubLink: 'Berhenti melanggan', subUnsubTitle: 'Berhenti melanggan', subUnsubLead: 'Masukkan alamat e-mel untuk dibuang daripada senarai NAVMAP.', subUnsubBtn: 'Berhenti melanggan', subUnsubDone: 'Selesai. E-mel itu tidak akan menerima e-mel NAVMAP.', subBackLink: 'Kembali untuk melanggan',
     tabNews: 'Berita', newsTitle: 'Berita alam & iklim', newsLead: 'Tajuk berita terkini tentang banjir, cuaca, jerebu, iklim dan alam semula jadi, dari Malaysia dan seluruh dunia.',
     newsLoading: 'Memuatkan berita terkini…', newsFailed: 'Tidak dapat memuatkan berita sekarang.', newsNone: 'Tiada berita untuk penapis ini.',
     newsLocal: 'Malaysia', newsWorld: 'Dunia', allTopics: 'Semua topik',
