@@ -83,3 +83,7 @@ public/                 manifest, service worker, icons, privacy page
 ```
 
 Map data © OpenStreetMap contributors. NAVMAP is not an official warning service. In an emergency call 999.
+
+## Copyright
+
+© 2026 Yush Abdullah. All rights reserved. See [LICENSE](LICENSE). Map, weather and alert data remain the property of their providers (OpenStreetMap contributors, Open-Meteo, RainViewer, data.gov.my).

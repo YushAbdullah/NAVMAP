@@ -45,7 +45,7 @@ const map = new maplibregl.Map({
   center: KL,
   zoom: 13,
   maxBounds: [[MY_BBOX[0] - 4, MY_BBOX[1] - 3], [MY_BBOX[2] + 4, MY_BBOX[3] + 3]],
-  attributionControl: { compact: true },
+  attributionControl: { compact: true, customAttribution: '© 2026 Yush Abdullah' },
 });
 const mapReady = new Promise((resolve) => map.on('load', resolve));
 
@@ -531,6 +531,7 @@ function render() {
   });
   const body = $('#sheet-body');
   body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : (S.selected ? viewPlace() : viewExplore());
+  body.insertAdjacentHTML('beforeend', `<p class="copyright">${t('copyright')}</p>`);
   syncLayout();
 }
 
@@ -993,7 +994,8 @@ function renderSos() {
   $('#sos-body').innerHTML = `<a class="sos-999" href="tel:999">${icon('phone')}<span><b>999</b><small>${t('sosLead')}</small></span></a>
     <div class="sos-loc"><small>${t('myCoords')}</small>${me ? `<div><b>${me}</b><button class="btn-ghost sm" data-sos-copy="${me}">${icon('copy')}${t('copy')}</button></div>` : `<p class="muted sm">${t('locUnknown')}</p>`}</div>
     ${groups}
-    <p class="source">${t('sosNote')}</p>`;
+    <p class="source">${t('sosNote')}</p>
+    <p class="copyright">${t('copyright')}</p>`;
 }
 $('#sos-btn').addEventListener('click', () => { renderSos(); sosDlg.showModal(); });
 $('#sos-close').addEventListener('click', () => sosDlg.close());

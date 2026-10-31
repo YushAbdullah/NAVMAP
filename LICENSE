@@ -1,0 +1,11 @@
+Copyright (c) 2026 Yush Abdullah. All rights reserved.
+
+NAVMAP (the web service, app, design and source code in this repository) is the
+property of Yush Abdullah. No part of it may be copied, modified, distributed,
+or used to run another service without prior written permission from the owner.
+
+Third-party components keep their own licences, including:
+- MapLibre GL JS (BSD-3-Clause)
+- Map data (c) OpenStreetMap contributors, Open Database Licence (ODbL)
+- Weather data by Open-Meteo (CC BY 4.0), radar by RainViewer
+- Alert data from data.gov.my
