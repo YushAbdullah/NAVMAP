@@ -79,7 +79,56 @@ async function loadRaw(cat, lat, lon, signal) {
 
 const cache = new Map();
 
+// ---- Preloaded data: every place in Malaysia, split into 1° grid cells (public/data/poi).
+// Built weekly by scripts/build-pois.mjs (GitHub Action). Served from the CDN, so it is instant.
+export const CELL_DEG = 1;
+export const cellKey = (lat, lon) => `${Math.floor(lat / CELL_DEG)}_${Math.floor(lon / CELL_DEG)}`;
+export const packPlace = (p) => [p.id, p.name, +p.lat.toFixed(5), +p.lon.toFixed(5), p.meta, p.address, p.hours, p.phone, p.website];
+const unpack = (a, cat) => ({ id: a[0], cat, name: a[1], lat: a[2], lon: a[3], meta: a[4] || '', address: a[5] || '', hours: a[6] || '', phone: a[7] || '', website: a[8] || '' });
+
+let manifestP = null;
+function manifest() {
+  manifestP ||= fetch('/data/poi/index.json')
+    .then((r) => (r.ok && (r.headers.get('content-type') || '').includes('json') ? r.json() : null))
+    .catch(() => null);
+  return manifestP;
+}
+const cellCache = new Map();
+function loadCell(cat, key) {
+  if (!cellCache.has(key + cat)) {
+    const p = fetch(`/data/poi/${cat}/${key}.json`).then((r) => (r.ok ? r.json() : { p: [] })).then((d) => d.p.map((a) => unpack(a, cat)));
+    cellCache.set(key + cat, p);
+    p.catch(() => cellCache.delete(key + cat));
+  }
+  return cellCache.get(key + cat);
+}
+
+/** Places from the preloaded grid within radiusKm, widening the search if very few are found. Null if no data. */
+async function fromStatic(cat, center) {
+  const m = await manifest();
+  const cells = m?.cells?.[cat];
+  if (!cells) return null;
+  const have = new Set(cells);
+  for (const km of [5, 15, 40]) {
+    const d = km / 111;
+    const keys = new Set();
+    for (const la of [center[1] - d, center[1], center[1] + d]) {
+      for (const lo of [center[0] - d, center[0], center[0] + d]) keys.add(cellKey(la, lo));
+    }
+    const lists = await Promise.all([...keys].filter((k) => have.has(k)).map((k) => loadCell(cat, k)));
+    const near = lists.flat()
+      .map((p) => ({ ...p, distKm: distKm(center, [p.lon, p.lat]) }))
+      .filter((p) => p.distKm <= km)
+      .sort((a, b) => a.distKm - b.distKm);
+    if (near.length >= 5 || km === 40) return near.slice(0, 80);
+  }
+  return [];
+}
+
 export async function fetchNearby(cat, center, signal) {
+  const fast = await fromStatic(cat, center).catch(() => null);
+  if (fast && fast.length) return fast;
+  // Live fallback (data not built yet, or nothing nearby in the snapshot)
   const lat = snap(center[1]), lon = snap(center[0]);
   const key = `${cat}:${lat},${lon}`;
   if (!cache.has(key)) {
@@ -95,6 +144,7 @@ export async function fetchNearby(cat, center, signal) {
 
 /** Warm the cache in the background (e.g. right after we know where the user is). */
 export function prefetchNearby(cats, center) {
+  manifest();
   for (const c of cats) fetchNearby(c, center).catch(() => {});
 }
 

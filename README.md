@@ -10,9 +10,9 @@ It is a Progressive Web App (PWA): it works in any browser and can be installed 
 |---|---|---|
 | Live map | [MapLibre GL](https://maplibre.org) + [OpenFreeMap](https://openfreemap.org) tiles (OpenStreetMap data) | Free, no key |
 | Place search | [Photon](https://photon.komoot.io) geocoder, limited to Malaysia | Free, no key |
-| Nearby EV, fuel, fast food, toilets, surau, hospitals | [Overpass API](https://overpass-api.de) (OpenStreetMap) | Free, no key |
+| Nearby EV, fuel, fast food, toilets, surau, hospitals | Preloaded for all of Malaysia from OpenStreetMap (`public/data/poi`, refreshed weekly by the *Update places data* GitHub Action), live [Overpass](https://overpass-api.de) as fallback | Free, no key |
 | Driving directions + alternatives | [OSRM](https://project-osrm.org) public demo server | Free, demo only (see below) |
-| Turn-by-turn guidance | Browser GPS (`watchPosition`) | Free |
+| Turn-by-turn guidance with voice (BM / EN) | Browser GPS + built-in speech; auto-reroute when you leave the route; spoken alert warnings | Free |
 | Flood alerts | JPS water-level stations via [data.gov.my flood warning API](https://developer.data.gov.my/realtime-api/flood-warning) | Free |
 | Weather + earthquake warnings | MetMalaysia via [data.gov.my weather API](https://developer.data.gov.my/realtime-api/weather) | Free |
 | Route safety check | Flags routes that pass inside an active alert area and prefers a safer alternative | – |
@@ -48,6 +48,10 @@ HTTPS matters: browsers only allow GPS location on secure sites.
 - **Shared hazard reports:** reports are local-only right now. Next step is a backend (Supabase or Firebase) with moderation so everyone sees reports, plus push notifications for alerts near saved places.
 - **Haze (API/IPU):** not yet connected; DOE does not publish an open API. Possible sources: data.gov.my datasets or an agreement with DOE.
 - **Legal:** finish `public/privacy.html` (PDPA 2010 notice, contact email) and keep the "not an official warning service" disclaimer.
+
+## Refresh the places data
+
+GitHub → **Actions → Update places data → Run workflow**. It runs automatically every Monday and commits the new data, which redeploys the site.
 
 ## Project layout
 

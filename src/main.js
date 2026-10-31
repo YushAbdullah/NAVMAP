@@ -9,6 +9,7 @@ import { CATEGORIES, fetchNearby, prefetchNearby } from './lib/places.js';
 import { searchPlaces } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
 import { loadAlerts } from './lib/alerts.js';
+import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voice.js';
 import { REPORT_TYPES, listReports, addReport } from './lib/reports.js';
 
 const MAP_STYLE = import.meta.env.VITE_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
@@ -316,28 +317,116 @@ function clearRoute() {
 }
 
 // ---------------------------------------------------------------- navigation
+const OFF_ROUTE_KM = 0.06;      // > 60 m from the line counts as off route
+const VOICE_STAGES = [          // [metres before the turn, stage id]
+  [1200, 'far'], [500, 'mid'], [120, 'near'],
+];
+
 function startNav() {
   const r = S.routes[S.routeIdx];
   if (!r) return;
-  S.nav = { step: 1, watchId: null };
+  S.nav = { step: 1, watchId: null, said: new Set(), offCount: 0, rerouting: false, alertSaid: new Set() };
   document.body.classList.add('navigating');
   $('#hud').hidden = false;
+  syncVoiceBtn();
+  // First announcement happens inside the tap, which unlocks speech on iOS.
+  const lang = getLang();
+  speak(`${lang === 'bm' ? 'Mula navigasi.' : 'Starting navigation.'} ${stepText(r.steps[0], lang)}. ${announce(r.steps[1], r.steps[0].distance, lang)}`, lang);
+  markSaid(1, r.steps[0].distance);
   if (navigator.geolocation) {
-    S.nav.watchId = navigator.geolocation.watchPosition(onNavPos, () => {}, { enableHighAccuracy: true, maximumAge: 2000 });
+    S.nav.watchId = navigator.geolocation.watchPosition(onNavPos, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
   }
-  map.easeTo({ center: r.coords[0], zoom: 16.5, pitch: 45, padding: mapPadding(), duration: 800 });
+  map.easeTo({ center: S.me || r.coords[0], zoom: 16.5, pitch: 45, padding: mapPadding(), duration: 800 });
   updateHud();
+}
+
+/** "In 500 metres, turn left onto Jalan Pudu" */
+function announce(step, metres, lang) {
+  if (!step) return '';
+  const text = stepText(step, lang);
+  if (metres == null || metres < 150) return text;
+  const lower = text.charAt(0).toLowerCase() + text.slice(1);
+  return lang === 'bm' ? `Dalam ${spokenDist(metres, lang)}, ${lower}` : `In ${spokenDist(metres, lang)}, ${lower}`;
 }
 
 function onNavPos(pos) {
   const r = S.routes[S.routeIdx];
-  if (!r || !S.nav) return;
+  if (!r || !S.nav || S.nav.rerouting) return;
   S.me = [pos.coords.longitude, pos.coords.latitude];
   drawMe();
-  // advance past steps we've reached
+  const lang = getLang();
+
+  // Off route? Three bad fixes in a row (ignoring very inaccurate fixes) triggers a reroute.
+  const near = r.coords.slice(Math.max(0, nearestIdx(r, S.me) - 30), nearestIdx(r, S.me) + 30);
+  const off = distToLineKm(S.me, near.length > 1 ? near : r.coords) > Math.max(OFF_ROUTE_KM, (pos.coords.accuracy || 0) / 1000);
+  S.nav.offCount = off ? S.nav.offCount + 1 : 0;
+  if (S.nav.offCount >= 3) { reroute(); return; }
+
+  // Advance past steps we've reached.
   while (S.nav.step < r.steps.length - 1 && distKm(S.me, r.steps[S.nav.step].location) < 0.03) S.nav.step++;
-  map.easeTo({ center: S.me, bearing: pos.coords.heading ?? map.getBearing(), duration: 600 });
+  const step = r.steps[S.nav.step];
+  const m = distKm(S.me, step.location) * 1000;
+
+  // Voice prompts at 1.2 km, 500 m and ~120 m before each turn, and on arrival.
+  if (step.type === 'arrive' && m < 40) {
+    if (!S.nav.said.has('arrived')) { S.nav.said.add('arrived'); speak(t('arrived'), lang); }
+  } else {
+    // closest stage first, so entering a short step speaks once, not twice
+    for (const [limit, id] of [...VOICE_STAGES].reverse()) {
+      const key = `${S.nav.step}:${id}`;
+      if (m > limit) continue;
+      if (!S.nav.said.has(key)) {
+        VOICE_STAGES.forEach(([l, other]) => { if (l >= limit) S.nav.said.add(`${S.nav.step}:${other}`); });
+        speak(id === 'near' ? stepText(step, lang) : announce(step, m, lang), lang);
+      }
+      break;
+    }
+  }
+
+  // Warn once when an active alert on this route is within 2 km.
+  for (const a of r.hits || []) {
+    if (S.nav.alertSaid.has(a.id) || distKm(S.me, [a.lon, a.lat]) > 2 + (a.radiusKm || 0)) continue;
+    S.nav.alertSaid.add(a.id);
+    speak(lang === 'bm' ? `Amaran di hadapan: ${L(a, 'title')}. Pandu dengan berhati-hati.` : `Alert ahead: ${L(a, 'title')}. Drive carefully.`, lang);
+    toast(`${L(a, 'title')}${a.place ? ` · ${a.place}` : ''}`);
+  }
+
+  map.easeTo({ center: S.me, bearing: Number.isFinite(pos.coords.heading) && pos.coords.speed > 1 ? pos.coords.heading : map.getBearing(), duration: 600 });
   updateHud();
+}
+
+/** Remember which prompts for a step are already covered by an announcement made at `metres`. */
+function markSaid(stepIdx, metres) {
+  VOICE_STAGES.forEach(([limit, id]) => { if (limit >= metres) S.nav.said.add(`${stepIdx}:${id}`); });
+}
+
+function nearestIdx(r, p) {
+  let best = 0, bd = Infinity;
+  const stride = Math.max(1, Math.floor(r.coords.length / 2000));
+  for (let i = 0; i < r.coords.length; i += stride) {
+    const d = distKm(p, r.coords[i]);
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+
+async function reroute() {
+  if (!S.nav || !S.dest || !S.me) return;
+  S.nav.rerouting = true;
+  const lang = getLang();
+  speak(lang === 'bm' ? 'Mengira semula laluan' : 'Rerouting', lang);
+  $('#hud-text').textContent = lang === 'bm' ? 'Mengira semula laluan…' : 'Rerouting…';
+  try {
+    const routes = await getRoutes(S.me, [S.dest.lon, S.dest.lat]);
+    if (!S.nav) return;
+    routes.forEach((x) => { x.hits = alertsOnRoute(x.coords); x.label = 'fastest'; });
+    S.routes = [routes[0]]; S.routeIdx = 0;
+    S.nav.step = 1; S.nav.said = new Set(); S.nav.offCount = 0;
+    drawRoutes();
+    speak(announce(routes[0].steps[1], routes[0].steps[0].distance, lang), lang);
+    markSaid(1, routes[0].steps[0].distance);
+  } catch { /* keep the old route, try again on the next bad fixes */ }
+  if (S.nav) { S.nav.rerouting = false; S.nav.offCount = 0; updateHud(); }
 }
 
 function updateHud() {
@@ -347,14 +436,25 @@ function updateHud() {
   $('#hud-ic').innerHTML = maneuverIcon(s);
   $('#hud-dist').textContent = s.type === 'arrive' && d < 0.05 ? t('arrived') : fmtDist(d);
   $('#hud-text').textContent = stepText(s, getLang());
+  const current = r.steps[Math.max(0, S.nav.step - 1)]?.name;
+  $('#hud-road').textContent = current ? `${getLang() === 'bm' ? 'Kini di' : 'On'} ${current}` : '';
   const remain = r.steps.slice(S.nav.step).reduce((acc, x) => ({ d: acc.d + x.distance, t: acc.t + x.duration }), { d: 0, t: 0 });
   const eta = new Date(Date.now() + remain.t * 1000).toLocaleTimeString(getLang() === 'bm' ? 'ms-MY' : 'en-MY', { hour: 'numeric', minute: '2-digit' });
   $('#hud-eta').textContent = `${fmtDur(remain.t, getLang())} · ${fmtDist(remain.d / 1000)} · ETA ${eta}`;
 }
 
+function syncVoiceBtn() {
+  const b = $('#hud-voice');
+  b.hidden = !voiceSupported();
+  b.setAttribute('aria-pressed', String(voiceOn()));
+  b.setAttribute('aria-label', voiceOn() ? t('voiceOff') : t('voiceOn'));
+  b.innerHTML = icon(voiceOn() ? 'sound' : 'mute');
+}
+
 function stopNav() {
   if (S.nav?.watchId != null) navigator.geolocation.clearWatch(S.nav.watchId);
   S.nav = null;
+  if (voiceSupported()) speechSynthesis.cancel();
   document.body.classList.remove('navigating');
   $('#hud').hidden = true;
   map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
@@ -619,6 +719,11 @@ document.addEventListener('click', (e) => {
 $('#grab').addEventListener('click', () => { $('#sheet').classList.toggle('expanded'); });
 $('#locate-btn').addEventListener('click', () => locate());
 $('#hud-stop').addEventListener('click', stopNav);
+$('#hud-voice').addEventListener('click', () => {
+  setVoice(!voiceOn());
+  syncVoiceBtn();
+  if (voiceOn() && S.nav) speak(stepText(S.routes[S.routeIdx].steps[S.nav.step], getLang()), getLang());
+});
 $('#lang-btn').addEventListener('click', () => {
   setLang(getLang() === 'en' ? 'bm' : 'en');
   $('#lang-btn').textContent = getLang() === 'en' ? 'BM' : 'EN';
