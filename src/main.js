@@ -13,7 +13,8 @@ import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voic
 import { PIN_TYPES } from './lib/pin-types.js';
 import { listPins, addPin, removePin } from './lib/pins.js';
 import * as pinsMod from './lib/pins.js';
-import { fetchWeather, wmo, aqiLabel, placeName, radarFrames } from './lib/weather.js';
+import { fetchWeather, wmo, aqiLabel, AQ_LEVELS, placeName, radarFrames } from './lib/weather.js';
+import { HOTLINE_GROUPS } from './lib/hotlines.js';
 
 const MAP_STYLE = import.meta.env.VITE_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
 const ALERT_REFRESH_MS = 5 * 60 * 1000;
@@ -670,13 +671,49 @@ function viewWeather() {
       <div><small>${t('humidity')}</small><b>${Math.round(n.humidity)}%</b></div>
       <div><small>${t('wind')}</small><b>${Math.round(n.wind)} km/h</b></div>
       <div><small>UV</small><b>${today.uv != null ? Math.round(today.uv) : '–'}</b></div>
-      <div class="aq-${aq?.level || 'na'}"><small>${t('air')}</small><b>${w.aqi != null ? Math.round(w.aqi) : '–'}</b><em>${aq ? esc(lang === 'bm' ? aq.bm : aq.en) : ''}</em></div>
+      <div class="aq-${aq?.level || 'na'}" data-action="poll-jump" role="button"><small>${t('air')}</small><b>${w.aqi != null ? Math.round(w.aqi) : '–'}</b><em>${aq ? esc(lang === 'bm' ? aq.bm : aq.en) : ''}</em></div>
     </div>
     <button class="btn-ghost radar-btn" data-action="radar" aria-pressed="${S.radar}">${icon('radar')}${S.radar ? t('radarOff') : t('radarOn')}</button>
     <h3 class="wx-h">${t('sevenDay')}</h3>
     <ul class="wx-days">${days}</ul>
+    ${pollutionCard(w)}
     ${community}
     <p class="source">${t('wxSource')}</p>`;
+}
+
+// Pollution index: big number, a Clean -> Worst scale with a marker, the level list and pollutants.
+function pollutionCard(w) {
+  const lang = getLang();
+  if (w.aqi == null) return `<section class="poll" id="poll"><h3 class="wx-h">${t('pollution')}</h3><p class="muted">${t('pollNa')}</p></section>`;
+  const aq = aqiLabel(w.aqi);
+  const pos = Math.min(w.aqi, 300) / 300 * 100; // scale runs 0..300+, the last band is "worst"
+  const levels = AQ_LEVELS.map((l, i) => {
+    const lo = i ? AQ_LEVELS[i - 1].max + 1 : 0, range = l.max === Infinity ? `${lo}+` : `${lo}–${l.max}`;
+    return `<li class="${l === aq ? 'on' : ''}"><i style="background:${l.color}"></i><span>${esc(lang === 'bm' ? l.bm : l.en)}</span><b>${range}</b></li>`;
+  }).join('');
+  const a = w.air || {};
+  const part = (k, label) => (a[k] != null ? `<div><small>${label}</small><b>${Math.round(a[k])}</b></div>` : '');
+  const peak = a.peak && aqiLabel(a.peak.aqi);
+  const peakTime = a.peak ? new Date(`${a.peak.time}:00+08:00`).toLocaleTimeString(lang === 'bm' ? 'ms-MY' : 'en-MY', { weekday: 'short', hour: 'numeric' }) : '';
+  return `<section class="poll" id="poll">
+    <h3 class="wx-h">${t('pollution')}</h3>
+    <div class="poll-card" style="--lvl:${aq.color}">
+      <div class="poll-top">
+        <div class="poll-num"><b>${Math.round(w.aqi)}</b><small>${t('pollNow')}</small></div>
+        <div class="poll-txt"><b>${esc(lang === 'bm' ? aq.bm : aq.en)}</b><p>${esc(aq.adv[lang] || aq.adv.en)}</p></div>
+      </div>
+      <div class="poll-scale" role="img" aria-label="${t('pollution')} ${Math.round(w.aqi)} / 300+">
+        <div class="poll-bar"><span class="poll-mark" style="left:${pos}%"></span></div>
+        <div class="poll-ends"><span>${t('pollClean')} · 0</span><span>300+ · ${t('pollWorst')}</span></div>
+      </div>
+      ${peak ? `<p class="poll-peak">${t('pollPeak')}: <b style="color:${peak.color}">${Math.round(a.peak.aqi)} · ${esc(lang === 'bm' ? peak.bm : peak.en)}</b> <small>(${esc(peakTime)})</small></p>` : ''}
+    </div>
+    <h4 class="poll-h">${t('pollLevels')}</h4>
+    <ul class="poll-levels">${levels}</ul>
+    <h4 class="poll-h">${t('pollParts')}</h4>
+    <div class="poll-parts">${part('pm25', 'PM2.5')}${part('pm10', 'PM10')}${part('o3', 'O₃')}${part('no2', 'NO₂')}${part('so2', 'SO₂')}${part('co', 'CO')}</div>
+    <p class="source">${t('pollSource')} <a href="https://eqms.doe.gov.my/APIMS/main" target="_blank" rel="noopener">APIMS (DOE)</a>.</p>
+  </section>`;
 }
 
 // Rain radar (RainViewer): animated frames over the past ~2 hours.
@@ -848,6 +885,7 @@ document.addEventListener('click', (e) => {
   if (act === 'pin-weather') openPinDialog();
   if (act === 'radar') toggleRadar();
   if (act === 'wx-retry') loadWeather(true);
+  if (act === 'poll-jump') $('#poll')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
 // ---------------------------------------------------------------- map-first sheet (mobile)
@@ -937,6 +975,34 @@ $('#report-grid').addEventListener('click', async (e) => {
   }
 });
 $('#wx-btn').addEventListener('click', () => { openSheet(); setTab('weather'); });
+
+// Emergency calls: Government, Car problem, NGOs, plus your coordinates to read to the operator.
+const sosDlg = $('#sos-dlg');
+function renderSos() {
+  const lang = getLang();
+  const me = S.me ? `${S.me[1].toFixed(5)}, ${S.me[0].toFixed(5)}` : null;
+  const groups = HOTLINE_GROUPS.map((g) => `<section class="sos-group">
+      <h3>${icon(g.icon)}${esc(g[lang])}</h3>
+      <ul>${g.items.map((h) => `<li class="${h.urgent ? 'urgent' : ''}">
+        <a class="sos-call" href="tel:${h.tel}"><span class="mid"><b>${esc(h.show)}</b><small>${esc(h[lang])}</small></span><span class="sos-ph">${icon('phone')}</span></a>
+        ${h.wa ? `<a class="sos-wa" href="https://wa.me/${h.wa}" target="_blank" rel="noopener" aria-label="${t('whatsapp')} ${esc(h.show)}">${icon('chat')}</a>` : ''}
+      </li>`).join('')}</ul>
+      ${g.note ? `<p class="muted sm">${esc(g.note[lang])}</p>` : ''}
+      ${g.workshop ? `<button class="btn-ghost" data-sos-workshop>${icon('workshop')}${t('findWorkshop')}</button>` : ''}
+    </section>`).join('');
+  $('#sos-body').innerHTML = `<a class="sos-999" href="tel:999">${icon('phone')}<span><b>999</b><small>${t('sosLead')}</small></span></a>
+    <div class="sos-loc"><small>${t('myCoords')}</small>${me ? `<div><b>${me}</b><button class="btn-ghost sm" data-sos-copy="${me}">${icon('copy')}${t('copy')}</button></div>` : `<p class="muted sm">${t('locUnknown')}</p>`}</div>
+    ${groups}
+    <p class="source">${t('sosNote')}</p>`;
+}
+$('#sos-btn').addEventListener('click', () => { renderSos(); sosDlg.showModal(); });
+$('#sos-close').addEventListener('click', () => sosDlg.close());
+sosDlg.addEventListener('click', async (e) => {
+  if (e.target === sosDlg) { sosDlg.close(); return; } // tap outside
+  const cp = e.target.closest('[data-sos-copy]');
+  if (cp) { try { await navigator.clipboard.writeText(cp.dataset.sosCopy); toast(t('copied')); } catch { /* ignore */ } return; }
+  if (e.target.closest('[data-sos-workshop]')) { sosDlg.close(); openSheet(); loadPlaces('workshop'); }
+});
 $('#radar-fab').addEventListener('click', () => toggleRadar());
 
 // ---------------------------------------------------------------- boot

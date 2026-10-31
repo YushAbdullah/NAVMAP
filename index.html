@@ -38,6 +38,9 @@
       </button>
     </div>
 
+    <!-- Emergency calls button (always on the map) -->
+    <button class="sos-fab" id="sos-btn" aria-label="Emergency calls" data-i18n-aria="sosTitle">SOS</button>
+
     <!-- Map controls -->
     <div class="fabs">
       <button class="fab wx-fab" id="wx-btn" hidden></button>
@@ -101,6 +104,15 @@
           <button value="cancel" class="btn-ghost" data-i18n="cancel">Cancel</button>
         </div>
       </form>
+    </dialog>
+
+    <!-- Emergency calls -->
+    <dialog id="sos-dlg" class="sos-dlg" aria-labelledby="sos-title">
+      <div class="sos-head">
+        <h2 id="sos-title" data-i18n="sosTitle">Emergency calls</h2>
+        <button class="icon-btn" id="sos-close" aria-label="Close" data-i18n-aria="close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div id="sos-body"></div>
     </dialog>
 
     <div class="toast" id="toast" role="status" hidden></div>

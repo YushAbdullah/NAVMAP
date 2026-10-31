@@ -19,6 +19,9 @@ It is a Progressive Web App (PWA): it works in any browser and can be installed 
 | Live weather (now, hourly, 7-day, UV, air quality) | [Open-Meteo](https://open-meteo.com) | Free, no key |
 | Animated rain radar | [RainViewer](https://www.rainviewer.com/api.html) | Free, no key |
 | Community pins (rain, heavy rain, storm, flood, wind, haze, landslide, fallen tree, hot, clear, accident, jam) | `api/pins.js` + Upstash Redis; only the device that pinned can remove it; pins expire after 1–12 h; 20 pins/hour per IP | Free tier |
+| Pollution index (0 clean to 300+ worst, 6 levels, PM2.5/PM10/O₃/NO₂/SO₂/CO, 24 h peak) | [Open-Meteo air quality](https://open-meteo.com/en/docs/air-quality-api) (CAMS model, US AQI scale); official DOE readings linked | Free, no key |
+| Emergency calls (SOS button): Government, Car problem, NGOs, plus your coordinates | `src/lib/hotlines.js`, numbers checked Oct 2026 | – |
+| Car workshops & tyre shops nearby | Overpass (`shop=car_repair`/`tyres`) | Free, no key |
 | BM / EN | Toggle in the search bar | – |
 
 If the alert feeds cannot be reached, the app shows **clearly labelled sample alerts** instead of failing silently.
