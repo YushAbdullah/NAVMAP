@@ -52,7 +52,7 @@ HTTPS matters: browsers only allow GPS location on secure sites.
 - **Search and Overpass:** both are community services with fair-use policies. For high traffic, self-host Photon/Nominatim and Overpass, or move to a paid places API.
 - **Shared hazard reports:** reports are local-only right now. Next step is a backend (Supabase or Firebase) with moderation so everyone sees reports, plus push notifications for alerts near saved places.
 - **Haze (API/IPU):** not yet connected; DOE does not publish an open API. Possible sources: data.gov.my datasets or an agreement with DOE.
-- **Legal:** `public/terms.html` and `public/privacy.html` (PDPA 2010) are templates written for this app; have a Malaysian lawyer review them, and add a contact email if you prefer it to GitHub issues.
+- **Legal:** `public/terms.html` and `public/privacy.html` (PDPA 2010) are templates written for this app; have a Malaysian lawyer review them. Contact on both pages: muhdyusry.abdullah@gmail.com.
 
 ## Turn on shared community pins (one time)
 
