@@ -353,3 +353,28 @@ body.navigating .sos-fab { bottom: 24px; }
 .nb-x { flex: none; width: 32px; height: 32px; border: 0; background: none; color: rgba(255,255,255,.7); display: grid; place-items: center; }
 .nb-x svg { width: 16px; height: 16px; }
 @media (prefers-reduced-motion: reduce) { .nb-txt.in { animation: none; } }
+
+/* ---------- Email updates sign-up ---------- */
+.linkish { border: 0; background: none; padding: 0; color: var(--success); text-decoration: underline; font: inherit; cursor: pointer; }
+.sub-card { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; padding: 12px; border-radius: 14px; background: var(--surface-tint); }
+.sub-card .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sub-card b { font-size: 14px; font-weight: 600; }
+.sub-card small { font-size: 12px; color: var(--text-muted); }
+.sub-ic { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--primary); }
+.sub-ic svg { width: 18px; height: 18px; }
+.btn.sm { height: 36px; padding: 0 14px; font-size: 13px; }
+.sub-field { display: flex; flex-direction: column; gap: 6px; margin: 16px 0 12px; font-size: 13px; font-weight: 500; color: var(--text-muted); }
+.sub-field input { height: 48px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; font: inherit; font-size: 16px; color: var(--text); background: var(--surface); }
+.sub-field input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+.sub-consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+.sub-consent[hidden] { display: none; }
+.sub-consent input { flex: none; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--success); }
+.sub-consent a { color: var(--success); }
+.sub-msg { min-height: 20px; margin: 10px 0 0; font-size: 13px; }
+.sub-msg.ok { color: var(--success); font-weight: 500; }
+.sub-msg.err { color: var(--danger); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.sub-foot { margin: 14px 0 0; font-size: 12px; text-align: center; }
+.btn.sm { width: auto; flex: none; }
+#sub-form .row-end { gap: 8px; margin-top: 8px; }
+#sub-form .row-end .btn { width: auto; height: 44px; font-size: 15px; }
