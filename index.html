@@ -66,6 +66,9 @@
       </button>
     </div>
 
+    <!-- Play view: points and level -->
+    <button class="score-chip" id="score-chip" hidden></button>
+
     <!-- Navigation HUD (active guidance) -->
     <div class="hud" id="hud" hidden>
       <div class="hud-step">
@@ -112,6 +115,7 @@
       <div class="lp-types" role="radiogroup" aria-labelledby="layers-title">
         <button type="button" role="radio" data-basemap="map" aria-checked="true"><span class="lp-thumb lp-map"></span><span data-i18n="layerMap">Map</span></button>
         <button type="button" role="radio" data-basemap="satellite" aria-checked="false"><span class="lp-thumb lp-sat"></span><span data-i18n="layerSat">Satellite</span></button>
+        <button type="button" role="radio" data-basemap="play" aria-checked="false"><span class="lp-thumb lp-play"></span><span data-i18n="layerPlay">Play</span></button>
       </div>
       <label class="lp-row"><input type="checkbox" id="lp-alerts" checked><span data-i18n="layerAlerts">Alerts and pins on map</span></label>
       <label class="lp-row"><input type="checkbox" id="lp-radar"><span data-i18n="radarOn">Show rain radar</span></label>
@@ -153,6 +157,15 @@
         <button class="icon-btn" id="sos-close" aria-label="Close" data-i18n-aria="close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
       <div id="sos-body"></div>
+    </dialog>
+
+    <!-- Play view: badges -->
+    <dialog id="score-dlg" class="score-dlg" aria-labelledby="score-title">
+      <div class="sos-head">
+        <h2 id="score-title" data-i18n="playTitle">Your badges</h2>
+        <button class="icon-btn" id="score-close" aria-label="Close" data-i18n-aria="close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div id="score-body"></div>
     </dialog>
 
     <div class="toast" id="toast" role="status" hidden></div>

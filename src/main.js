@@ -12,6 +12,8 @@ import { loadAlerts } from './lib/alerts.js';
 import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voice.js';
 import { PIN_TYPES } from './lib/pin-types.js';
 import { listPins, addPin, removePin } from './lib/pins.js';
+import { applyPlay, PLAY_PITCH } from './lib/play.js';
+import { award, getScore, levelOf, LEVEL_PTS, BADGES } from './lib/score.js';
 import * as pinsMod from './lib/pins.js';
 import { getSaved, setSaved, savedKindAt, SAVED_KINDS } from './lib/saved.js';
 import { fetchWeather, wmo, aqiLabel, AQ_LEVELS, placeName, radarFrames } from './lib/weather.js';
@@ -361,8 +363,10 @@ function startNav() {
   if (navigator.geolocation) {
     S.nav.watchId = navigator.geolocation.watchPosition(onNavPos, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
   }
-  map.easeTo({ center: S.me || r.coords[0], zoom: 16.5, pitch: 45, padding: mapPadding(), duration: 800 });
+  map.easeTo({ center: S.me || r.coords[0], zoom: 16.5, pitch: isPlay() ? PLAY_PITCH : 45, padding: mapPadding(), duration: 800 });
   updateHud();
+  const g = award('nav');
+  if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 3400);
 }
 
 /** "In 500 metres, turn left onto Jalan Pudu" */
@@ -482,7 +486,7 @@ function stopNav() {
   if (voiceSupported()) speechSynthesis.cancel();
   document.body.classList.remove('navigating');
   $('#hud').hidden = true;
-  map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+  map.easeTo({ pitch: isPlay() ? PLAY_PITCH : 0, bearing: 0, duration: 600 });
 }
 
 // ---------------------------------------------------------------- alerts
@@ -1147,7 +1151,7 @@ $('#hud-voice').addEventListener('click', () => {
 $('#lang-btn').addEventListener('click', () => {
   setLang(getLang() === 'en' ? 'bm' : 'en');
   $('#lang-btn').textContent = getLang() === 'en' ? 'BM' : 'EN';
-  renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab();
+  renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab(); renderScore();
   if (S.nav) updateHud();
 });
 // ---------------------------------------------------------------- map layers menu
@@ -1156,13 +1160,20 @@ $('#lang-btn').addEventListener('click', () => {
 const SAT_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const SAT_ATTR = 'Imagery © <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics';
 const labelPaint = new Map(); // original label colours, restored when leaving satellite
-const getBasemap = () => { try { return localStorage.getItem('navmap.basemap') === 'satellite' ? 'satellite' : 'map'; } catch { return 'map'; } };
+const BASEMAPS = ['map', 'satellite', 'play'];
+const getBasemap = () => { try { const v = localStorage.getItem('navmap.basemap'); return BASEMAPS.includes(v) ? v : 'map'; } catch { return 'map'; } };
+const isPlay = () => document.documentElement.dataset.basemap === 'play';
 async function setBasemap(kind) {
   try { localStorage.setItem('navmap.basemap', kind); } catch { /* private mode */ }
   document.querySelectorAll('[data-basemap]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.basemap === kind)));
+  const wasPlay = isPlay();
   document.documentElement.dataset.basemap = kind;
+  renderScore();
   await mapReady;
   const sat = kind === 'satellite';
+  const play = kind === 'play';
+  // Undo Play first so the satellite code below saves the street map's own label colours.
+  if (!play) applyPlay(map, false);
   const layers = map.getStyle().layers;
   if (sat && !map.getLayer('sat')) {
     if (!map.getSource('sat')) map.addSource('sat', { type: 'raster', tiles: [SAT_TILES], tileSize: 256, maxzoom: 19, attribution: SAT_ATTR });
@@ -1190,8 +1201,53 @@ async function setBasemap(kind) {
       }
     } catch { /* layer without text */ }
   }
+  if (play) {
+    applyPlay(map, true);
+    if (!S.nav) map.easeTo({ pitch: PLAY_PITCH, zoom: Math.max(map.getZoom(), 16), duration: 900 });
+    const r = award('explore');
+    if (r.badges.length) celebrate(r);
+  } else if (wasPlay && !S.nav) map.easeTo({ pitch: 0, duration: 600 });
 }
-if (getBasemap() === 'satellite') setBasemap('satellite');
+if (getBasemap() !== 'map') setBasemap(getBasemap());
+
+// ---------------------------------------------------------------- Play view: points and badges
+function renderScore() {
+  const chip = $('#score-chip');
+  if (!chip) return;
+  chip.hidden = !isPlay();
+  const s = getScore();
+  chip.innerHTML = `<span class="sc-lvl">${esc(t('playLevel'))} ${levelOf(s.pts)}</span><span class="sc-pts">⭐ ${s.pts}</span>`;
+  chip.setAttribute('aria-label', `${t('playLevel')} ${levelOf(s.pts)}, ${s.pts} ${t('playPoints')}`);
+}
+function celebrate({ gained, badges }) {
+  renderScore();
+  const bm = getLang() === 'bm';
+  const parts = [];
+  if (gained) parts.push(`+${gained} ${t('playPoints')}`);
+  for (const b of badges) parts.push(`${b.icon} ${t('playBadge')}: ${bm ? b.bm : b.en}`);
+  if (parts.length) toast(parts.join(' · '));
+  if (gained && isPlay()) {
+    const chip = $('#score-chip');
+    chip.classList.remove('bump'); void chip.offsetWidth; chip.classList.add('bump');
+  }
+}
+function renderScoreDialog() {
+  const s = getScore();
+  const bm = getLang() === 'bm';
+  const lvl = levelOf(s.pts);
+  const into = s.pts % LEVEL_PTS;
+  $('#score-body').innerHTML = `
+    <p class="sc-big"><b>${esc(t('playLevel'))} ${lvl}</b> · ⭐ ${s.pts} ${esc(t('playPoints'))}</p>
+    <div class="sc-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${LEVEL_PTS}" aria-valuenow="${into}"><span style="width:${(into / LEVEL_PTS) * 100}%"></span></div>
+    <p class="muted">${esc(t('playNext').replace('{n}', LEVEL_PTS - into))}</p>
+    <ul class="sc-badges">${BADGES.map((b) => {
+      const got = s.badges.includes(b.id);
+      return `<li class="${got ? 'got' : ''}"><span class="sc-ic" aria-hidden="true">${got ? b.icon : '🔒'}</span><span><b>${esc(bm ? b.bm : b.en)}</b><small>${esc(bm ? b.bmHint : b.enHint)}</small></span></li>`;
+    }).join('')}</ul>
+    <p class="muted sc-how">${esc(t('playHow'))}</p>`;
+}
+$('#score-chip').addEventListener('click', () => { renderScoreDialog(); $('#score-dlg').showModal(); });
+$('#score-close').addEventListener('click', () => $('#score-dlg').close());
 
 const layersBtn = $('#alerts-layer-btn');
 const layersPop = $('#layers-pop');
@@ -1243,6 +1299,8 @@ $('#report-grid').addEventListener('click', async (e) => {
     S.reports = [...S.reports.filter((x) => x.id !== r.id), r];
     drawAlerts(); renderBanner(); render();
     toast(pinsMod.shared ? t('pinnedShared') : t('pinnedLocal'));
+    const g = award('pin');
+    if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 2400);
   } catch (err) {
     toast(err.message === 'rate' ? t('pinRate') : t('pinFailed'));
   }
