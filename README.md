@@ -24,6 +24,7 @@ It is a Progressive Web App (PWA): it works in any browser and can be installed 
 | Nature & climate news (Malaysia + world, topic filters) | `api/news.js` reads public RSS feeds (Google News EN/BM, Malay Mail, The Star, Guardian, BBC, UN News, Mongabay), 15-min edge cache | Free |
 | Email updates sign-up (unticked PDPA consent box, unsubscribe) | `api/subscribe.js` → Upstash hash `navmap:subs`; owner export: set `ADMIN_KEY` in Vercel, then open `/api/subscribe?export=csv&key=<ADMIN_KEY>` | Free tier |
 | Visitor analytics (cookieless) | Vercel Web Analytics script in `index.html`; turn on in Vercel → Project → Analytics | Free (Hobby limits) |
+| Public visitor counter | `api/stats.js`: daily HyperLogLog in the same Upstash Redis (`navmap:v:<date>`, Malaysia time, kept 40 days). Shows "N visitors today · N live pins" above the footer. Stores no IP or identifier; skips bots and browsers sending Do Not Track / GPC | Free |
 | Car workshops & tyre shops nearby | Overpass (`shop=car_repair`/`tyres`) | Free, no key |
 | BM / EN | Toggle in the search bar | – |
 

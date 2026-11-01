@@ -21,6 +21,7 @@ const ALERT_REFRESH_MS = 5 * 60 * 1000;
 
 // ---------------------------------------------------------------- state
 const S = {
+  stats: null,
   tab: 'explore',
   cat: null,
   places: [], placesStatus: 'idle', showAll: false, placesCenter: null,
@@ -534,7 +535,7 @@ function render() {
   });
   const body = $('#sheet-body');
   body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : S.tab === 'news' ? viewNews() : (S.selected ? viewPlace() : viewExplore());
-  body.insertAdjacentHTML('beforeend', `<p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`);
+  body.insertAdjacentHTML('beforeend', `${statsLine()}<p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`);
   syncLayout();
 }
 
@@ -820,6 +821,33 @@ async function loadNews(force = false) {
 }
 setInterval(() => { if (!document.hidden) loadNews(); }, 5 * 60e3);
 setTimeout(() => loadNews(), 2500);
+
+// ---------------------------------------------------------------- public visitor counter
+// Anonymous: the server keeps only a fuzzy daily count, never who visited (see api/stats.js).
+function statsLine() {
+  const st = S.stats;
+  if (!st || !(st.today > 0)) return '';
+  const n = (x) => Number(x).toLocaleString(getLang() === 'bm' ? 'ms-MY' : 'en-MY');
+  const parts = [`<b>${n(st.today)}</b> ${t(st.today === 1 ? 'statVisitor' : 'statVisitors')}`];
+  if (st.pins > 0) parts.push(`<b>${n(st.pins)}</b> ${t(st.pins === 1 ? 'statPin' : 'statPins')}`);
+  return `<p class="stats-line" aria-live="polite">${icon('users')}<span>${parts.join(' · ')}</span></p>`;
+}
+async function loadStats() {
+  try {
+    const optOut = navigator.globalPrivacyControl === true || navigator.doNotTrack === '1';
+    const counted = (() => { try { return sessionStorage.getItem('navmap.counted') === '1'; } catch { return false; } })();
+    const r = await fetch('/api/stats', { method: optOut || counted ? 'GET' : 'POST' });
+    if (!r.ok) return;
+    S.stats = await r.json();
+    try { sessionStorage.setItem('navmap.counted', '1'); } catch { /* private mode */ }
+    const el = document.querySelector('#sheet-body .stats-line');
+    const html = statsLine();
+    if (el) el.outerHTML = html || '';
+    else if (html) document.querySelector('#sheet-body .copyright')?.insertAdjacentHTML('beforebegin', html);
+  } catch { /* counter is optional */ }
+}
+setTimeout(loadStats, 1500);
+setInterval(() => { if (!document.hidden) loadStats(); }, 10 * 60e3);
 
 // Headline ticker above the alert banner: rotates the most relevant fresh stories, tap to read.
 let newsBarTimer = null, newsBarIdx = 0;
