@@ -8,6 +8,8 @@ import { distKm, distToLineKm, fmtDist, fmtDur, fmtAgo, circle, KL, MY_BBOX } fr
 import { CATEGORIES, fetchNearby, prefetchNearby } from './lib/places.js';
 import { searchPlaces, reverseName } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
+import { getTransit, clock, delayMin, isWalk, isRail, TZ } from './lib/transit.js';
+import { RIDE_APPS, openRide, gmapsTransit } from './lib/rides.js';
 import { measure, along, pointHazards, routeHaze, routeStates, areaWarnings, hazardCount } from './lib/route-hazards.js';
 import { loadAlerts } from './lib/alerts.js';
 import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
@@ -39,6 +41,8 @@ const S = {
   ptEdit: null,             // 'start' | 'end' while its search box is open in the Drive tab
   picking: null,            // 'start' | 'end' while waiting for a tap on the map
   routes: [], routeIdx: 0, routeStatus: 'idle', routeOrigin: null,
+  mode: loadMode(),         // 'car' | 'moto' | 'bus' | 'train' (Drive tab travel mode)
+  leaveAt: '',              // 'HH:MM' Malaysian time for bus and train trips; '' = now
   alerts: [], alertMode: 'loading', alertsAt: null, alertFilter: 'all',
   reports: [],
   wx: null, wxStatus: 'idle', wxPlace: '', radar: false,
@@ -107,6 +111,16 @@ map.on('load', () => {
     layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#003503', 'line-width': 10 } });
   map.addLayer({ id: 'route-main', type: 'line', source: 'routes', filter: ['==', ['get', 'sel'], true],
     layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#6BE683', 'line-width': 6 } });
+  // Bus and train trips: walking legs dashed, rides in the line's own colour, a dot at each stop you use.
+  map.addSource('transit', { type: 'geojson', data: fc([]) });
+  map.addLayer({ id: 'transit-walk', type: 'line', source: 'transit', filter: ['all', ['==', '$type', 'LineString'], ['==', ['get', 'walk'], true]],
+    layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#4F5B52', 'line-width': 4, 'line-dasharray': [0.1, 1.8] } });
+  map.addLayer({ id: 'transit-casing', type: 'line', source: 'transit', filter: ['all', ['==', '$type', 'LineString'], ['!=', ['get', 'walk'], true]],
+    layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#003503', 'line-width': 10 } });
+  map.addLayer({ id: 'transit-ride', type: 'line', source: 'transit', filter: ['all', ['==', '$type', 'LineString'], ['!=', ['get', 'walk'], true]],
+    layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 6 } });
+  map.addLayer({ id: 'transit-stop', type: 'circle', source: 'transit', filter: ['==', '$type', 'Point'],
+    paint: { 'circle-radius': 5, 'circle-color': '#FFFFFF', 'circle-stroke-width': 3, 'circle-stroke-color': '#003503' } });
   map.addLayer({ id: 'alert-dot', type: 'circle', source: 'alerts', filter: ['==', '$type', 'Point'],
     paint: { 'circle-radius': 7, 'circle-stroke-width': 3, 'circle-stroke-color': '#FFFFFF',
       'circle-color': ['match', ['get', 'severity'], 'danger', '#C42A36', 'warning', '#9A6A00', '#1A7F55'] } });
@@ -289,7 +303,16 @@ async function onVote(pinId, v) {
 
 async function drawRoutes() {
   await mapReady;
-  const feats = S.routes.map((r, i) => ({ type: 'Feature', properties: { idx: i, sel: i === S.routeIdx }, geometry: { type: 'LineString', coordinates: r.coords } }));
+  const sel = S.routes[S.routeIdx];
+  // A bus or train trip is drawn leg by leg on its own layers; the plain route line only shows the other choices.
+  const legs = sel?.transit ? sel.legs.flatMap((l) => {
+    const walk = isWalk(l.mode);
+    const line = { type: 'Feature', properties: { walk, color: l.color || (isRail(l.mode) ? '#2D7FF9' : '#E0A100') }, geometry: { type: 'LineString', coordinates: l.coords } };
+    return walk ? [line] : [line, ...[l.coords[0], l.coords[l.coords.length - 1]].map((c) => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } }))];
+  }) : [];
+  map.getSource('transit')?.setData(fc(legs));
+  const feats = S.routes.map((r, i) => ({ type: 'Feature', properties: { idx: i, sel: i === S.routeIdx }, geometry: { type: 'LineString', coordinates: r.coords } }))
+    .filter((f) => !(sel?.transit && f.properties.sel));
   // selected route drawn last
   feats.sort((a, b) => Number(a.properties.sel) - Number(b.properties.sel));
   map.getSource('routes')?.setData(fc(feats));
@@ -419,8 +442,11 @@ async function computeRoute() {
   S.routeOrigin = S.start ? 'custom' : S.me ? 'me' : 'centre';
   routeAbort?.abort();
   routeAbort = new AbortController();
+  S.routeErr = null;
   try {
-    const routes = await getRoutes(from, [dest.lon, dest.lat], routeAbort.signal);
+    const routes = isTransit()
+      ? await getTransit({ from, to: [dest.lon, dest.lat], mode: S.mode, time: leaveIso() }, routeAbort.signal)
+      : await getRoutes(from, [dest.lon, dest.lat], routeAbort.signal);
     routes.forEach(scanRoute);
     labelRoutes(routes);
     S.routes = routes;
@@ -432,6 +458,7 @@ async function computeRoute() {
   } catch (e) {
     if (e.name === 'AbortError') return;
     S.routeStatus = 'error';
+    S.routeErr = e.code || null;
   }
   render();
 }
@@ -499,6 +526,11 @@ function ptSearch(v) {
   }, 280);
 }
 document.addEventListener('input', (e) => { if (e.target.id === 'pt-q') ptSearch(e.target.value.trim()); });
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'leave-at') return;
+  S.leaveAt = e.target.value || '';
+  if (S.dest && isTransit()) computeRoute();
+});
 document.addEventListener('keydown', (e) => {
   if (e.target.id !== 'pt-q') return;
   if (e.key === 'Escape') { S.ptEdit = null; render(); }
@@ -516,6 +548,7 @@ function scanRoute(r) {
 
 // Prefer a route with fewer hazards if one exists.
 function labelRoutes(routes) {
+  if (routes[0]?.transit) { routes.forEach((r) => { r.label = 'alt'; }); return; }
   const n0 = hazardCount(routes[0]);
   const safer = routes.findIndex((r) => hazardCount(r) < n0);
   routes.forEach((r, i) => { r.label = i === 0 ? 'fastest' : (i === safer ? 'safest' : 'alt'); });
@@ -557,7 +590,7 @@ function hazardRows(r) {
   });
   if (r.haze) {
     const lv = r.haze.level;
-    rows.push({ sev: r.haze.aqi > 150 ? 'danger' : 'warning', html: `<div class="row haz-row"><span class="ic ${r.haze.aqi > 150 ? 'danger' : 'warn'}">${icon('haze')}</span><span class="mid"><b>${esc(t('hazHaze').replace('{n}', Math.round(r.haze.aqi)))} · ${esc(lv?.[lang] || lv?.en || '')}</b><small>${esc(`${r.haze.km < 0.5 ? t('hazAtStart') : t('hazAround').replace('{d}', fmtDist(r.haze.km))} · ${t('hazHazeTip')}`)}</small></span></div>` });
+    rows.push({ sev: r.haze.aqi > 150 ? 'danger' : 'warning', html: `<div class="row haz-row"><span class="ic ${r.haze.aqi > 150 ? 'danger' : 'warn'}">${icon('haze')}</span><span class="mid"><b>${esc(t('hazHaze').replace('{n}', Math.round(r.haze.aqi)))} · ${esc(lv?.[lang] || lv?.en || '')}</b><small>${esc(`${r.haze.km < 0.5 ? t('hazAtStart') : t('hazAround').replace('{d}', fmtDist(r.haze.km))} · ${t(S.mode === 'moto' ? 'hazHazeTipMoto' : isTransit() ? 'hazHazeTipTransit' : 'hazHazeTip')}`)}</small></span></div>` });
   }
   for (const { a, states } of r.areas || []) {
     rows.push({ sev: a.severity, html: `<button class="row haz-row" data-tab="alerts"><span class="ic ${sevCls(a.severity)}">${icon('storm')}</span><span class="mid"><b>${esc(t('hazArea').replace('{s}', states.join(', ')))}</b><small>${esc(L(a, 'title'))}</small></span></button>` });
@@ -581,9 +614,10 @@ function navAreaWarnings() {
   const lang = getLang();
   if (r.haze && !S.nav.alertSaid.has('haze')) {
     S.nav.alertSaid.add('haze');
+    const moto = S.mode === 'moto';
     speak(lang === 'bm'
-      ? `Jerebu di laluan ini, indeks pencemaran ${Math.round(r.haze.aqi)}. Tutup tingkap dan guna edaran semula udara.`
-      : `Haze on this route, pollution index ${Math.round(r.haze.aqi)}. Close the windows and set the air con to recirculate.`, lang);
+      ? `Jerebu di laluan ini, indeks pencemaran ${Math.round(r.haze.aqi)}. ${moto ? 'Pakai pelitup muka dan tutup visor.' : 'Tutup tingkap dan guna edaran semula udara.'}`
+      : `Haze on this route, pollution index ${Math.round(r.haze.aqi)}. ${moto ? 'Wear a mask and close your visor.' : 'Close the windows and set the air con to recirculate.'}`, lang);
   }
   for (const { a, states } of r.areas || []) {
     if (S.nav.alertSaid.has(a.id)) continue;
@@ -693,7 +727,7 @@ function onNavPos(pos) {
     } else {
       if (S.nav.alertSaid.has(`${a.id}:near`)) continue;
       S.nav.alertSaid.add(`${a.id}:near`); S.nav.alertSaid.add(`${a.id}:far`);
-      speak(lang === 'bm' ? `${title} di hadapan. Perlahan dan pandu dengan berhati-hati.` : `${title} ahead. Slow down and drive carefully.`, lang);
+      speak(lang === 'bm' ? `${title} di hadapan. Perlahan dan ${S.mode === 'moto' ? 'tunggang' : 'pandu'} dengan berhati-hati.` : `${title} ahead. Slow down and ${S.mode === 'moto' ? 'ride' : 'drive'} carefully.`, lang);
     }
     toast(`${title}${a.place ? ` · ${a.place}` : ''}`);
   }
@@ -971,15 +1005,24 @@ function ptRow(which) {
 
 function viewDrive() {
   const lang = getLang();
-  const pts = `<div class="route-pts">${ptRow('start')}${ptRow('end')}${S.dest && !S.ptEdit ? `<button class="pt-swap" data-action="pt-swap" aria-label="${t('swap')}" title="${t('swap')}">${icon('swap')}</button>` : ''}</div>`;
+  const pts0 = `<div class="route-pts">${ptRow('start')}${ptRow('end')}${S.dest && !S.ptEdit ? `<button class="pt-swap" data-action="pt-swap" aria-label="${t('swap')}" title="${t('swap')}">${icon('swap')}</button>` : ''}</div>`;
   if (!S.dest) {
-    return `${S.ptEdit ? '' : savedBar()}<div class="sh-head"><h2>${t('noDest')}</h2></div>${pts}${S.ptEdit ? '' : `<p class="muted">${t('noDestHint')}</p>${quickGrid()}`}`;
+    return `${S.ptEdit ? '' : savedBar()}<div class="sh-head"><h2>${t('noDest')}</h2></div>${pts0}${S.ptEdit ? '' : `${modeBar()}<p class="muted">${t('noDestHint')}</p>${quickGrid()}`}`;
   }
-  if (S.ptEdit) return pts;
-  if (S.routeStatus === 'loading') return `${pts}<div class="empty-state"><span class="spinner"></span>${t('routing')}</div>`;
-  if (S.routeStatus === 'error') return `${pts}<div class="empty-state">${icon('nav')}${t('routeFailed')}<button class="btn-ghost" data-action="reroute">${t('retry')}</button></div>`;
+  if (S.ptEdit) return pts0;
+  const pts = `${pts0}${modeBar()}${isTransit() ? leaveBar() : ''}`;
+  if (S.routeStatus === 'loading') return `${pts}<div class="empty-state"><span class="spinner"></span>${t(isTransit() ? 'transitLoading' : 'routing')}</div>`;
+  if (S.routeStatus === 'error') {
+    if (isTransit()) {
+      return `${pts}<div class="empty-state">${icon(S.mode)}${t(S.routeErr === 'none' ? (S.mode === 'bus' ? 'transitNoneBus' : 'transitNoneTrain') : 'transitFailed')}
+        <button class="btn-ghost" data-action="reroute">${t('retry')}</button></div>
+        <p class="gmaps-row"><a class="btn-ghost gmaps" href="${esc(gmapsTransit(S.start || meCoords(), S.dest))}" target="_blank" rel="noopener">${icon('search')}${t('gmapsTransit')}</a></p>${ridesView()}`;
+    }
+    return `${pts}<div class="empty-state">${icon('nav')}${t('routeFailed')}<button class="btn-ghost" data-action="reroute">${t('retry')}</button></div>`;
+  }
   const r = S.routes[S.routeIdx];
   if (!r) return pts;
+  if (r.transit) return `${pts}${viewTransit(r)}`;
   const alts = S.routes.length > 1 ? `<div class="alts" role="group">${S.routes.map((x, i) =>
     `<button class="alt" data-route="${i}" aria-pressed="${i === S.routeIdx}"><b>${fmtDur(x.duration, lang)}</b>${t(x.label)} · ${fmtDist(x.distance / 1000)}${hazardCount(x) ? ` · ⚠ ${hazardCount(x)}` : ''}</button>`).join('')}</div>` : '';
   const warn = routeHazardsView(r);
@@ -992,8 +1035,108 @@ function viewDrive() {
     <div class="summary"><b>${fmtDur(r.duration, lang)}</b><span>${fmtDist(r.distance / 1000)}${r.via ? ` · ${t('via')} ${esc(r.via)}` : ''}</span></div>
     ${alts}${warn}
     ${go}
+    ${ridesView()}
     <div class="sh-head" style="margin-top:16px"><h2 style="font-size:16px">${t('steps')}</h2></div>
     <ol class="list steps">${steps}</ol>`;
+}
+
+// ---------------------------------------------------------------- travel modes
+const MODES = ['car', 'moto', 'bus', 'train'];
+function loadMode() {
+  try { const m = localStorage.getItem('navmap.mode'); return ['car', 'moto', 'bus', 'train'].includes(m) ? m : 'car'; } catch { return 'car'; }
+}
+function setMode(m) {
+  if (!MODES.includes(m) || S.nav) return;
+  S.mode = m;
+  try { localStorage.setItem('navmap.mode', m); } catch { /* private mode */ }
+  if (S.dest) computeRoute(); else render();
+}
+const isTransit = () => S.mode === 'bus' || S.mode === 'train';
+const meCoords = () => (S.me ? { lat: S.me[1], lon: S.me[0] } : null);
+
+function modeBar() {
+  return `<div class="modes" role="group" aria-label="${esc(t('modeTitle'))}">${MODES.map((m) =>
+    `<button class="mode" data-action="mode" data-mode="${m}" aria-pressed="${S.mode === m}">${icon(m)}<span>${t(`mode_${m}`)}</span></button>`).join('')}</div>`;
+}
+
+/** Bus and train: leave now, or at a time the user picks (Malaysian time). */
+function leaveBar() {
+  return `<div class="leave"><label for="leave-at">${icon('clock')}${t('leaveAt')}</label>
+    <input id="leave-at" type="time" value="${esc(S.leaveAt)}" aria-describedby="leave-now">
+    ${S.leaveAt ? `<button class="btn-ghost" data-action="leave-now" id="leave-now">${t('leaveNow')}</button>` : `<span class="muted" id="leave-now">${t('leaveNowOn')}</span>`}</div>`;
+}
+
+function leaveIso() {
+  if (!/^\d{2}:\d{2}$/.test(S.leaveAt)) return '';
+  const day = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+  let at = new Date(`${day}T${S.leaveAt}:00+08:00`);
+  if (at < Date.now() - 10 * 60e3) at = new Date(at.getTime() + 864e5); // a time already past means tomorrow
+  return at.toISOString();
+}
+
+const lineBadge = (l) => {
+  const bg = l.color || (isRail(l.mode) ? '#2D7FF9' : '#E0A100');
+  return `<span class="line-badge" style="--bg:${esc(bg)};--fg:${esc(l.textColor || '#FFFFFF')}">${icon(isRail(l.mode) ? 'train' : 'bus')}${esc(l.line || (isRail(l.mode) ? t('mode_train') : t('mode_bus')))}</span>`;
+};
+
+function lateTag(actual, planned) {
+  const d = delayMin(actual, planned);
+  if (!d) return '';
+  return ` <em class="late${d < 0 ? ' early' : ''}">${(d > 0 ? t('transitLate') : t('transitEarly')).replace('{n}', Math.abs(d))}</em>`;
+}
+
+function viewTransit(r) {
+  const lang = getLang();
+  const rides = r.legs.filter((l) => !isWalk(l.mode));
+  const alts = S.routes.length > 1 ? `<div class="alts" role="group">${S.routes.map((x, i) =>
+    `<button class="alt" data-route="${i}" aria-pressed="${i === S.routeIdx}"><b>${clock(x.start, lang)} → ${clock(x.end, lang)}</b>${fmtDur(x.duration, lang)} · ${x.legs.filter((l) => !isWalk(l.mode)).map((l) => esc(l.line || '')).filter(Boolean).join(' › ')}${hazardCount(x) ? ` · ⚠ ${hazardCount(x)}` : ''}</button>`).join('')}</div>` : '';
+  const first = rides[0];
+  const sub = [
+    first ? t('transitDepart').replace('{t}', clock(first.start, lang)).replace('{s}', first.from.name) : '',
+    r.transfers ? t(r.transfers === 1 ? 'transfer1' : 'transferN').replace('{n}', r.transfers) : t('transfer0'),
+    r.walkSec > 60 ? t('walkMin').replace('{n}', Math.round(r.walkSec / 60)) : '',
+  ].filter(Boolean).map(esc).join(' · ');
+  const last = r.legs.length - 1;
+  const legs = r.legs.map((l, i) => {
+    if (isWalk(l.mode)) {
+      const to = i === last ? t('transitToDest') : l.to.name;
+      const mins = Math.max(1, Math.round((l.duration || 0) / 60));
+      return `<li class="leg walk"><span class="ic">${icon('walk')}</span><span class="mid"><b>${esc(t('walkTo').replace('{n}', mins).replace('{s}', to))}</b>
+        <small>${esc([l.distance ? fmtDist(l.distance / 1000) : '', clock(l.start, lang)].filter(Boolean).join(' · '))}</small></span></li>`;
+    }
+    const toward = l.headsign ? ` ${t('towards')} ${esc(l.headsign)}` : '';
+    const stops = t(l.stops + 1 === 1 ? 'stop1' : 'stopN').replace('{n}', l.stops + 1);
+    return `<li class="leg ride" style="--line:${esc(l.color || (isRail(l.mode) ? '#2D7FF9' : '#E0A100'))}"><span class="ic">${icon(isRail(l.mode) ? 'train' : 'bus')}</span><span class="mid">
+      <b><time>${clock(l.start, lang)}</time>${lateTag(l.start, l.startPlan)} ${esc(l.from.name)}${l.from.track ? ` · ${esc(t('platform'))} ${esc(l.from.track)}` : ''}</b>
+      <small>${lineBadge(l)}${toward}${l.lineName && l.lineName !== l.line ? ` · ${esc(l.lineName)}` : ''}</small>
+      <small>${esc(stops)} · ${fmtDur(l.duration, lang)}${l.agency ? ` · ${esc(l.agency)}` : ''}${l.live ? ` · <span class="live">${t('transitLive')}</span>` : ''}</small>
+      <b class="alight"><time>${clock(l.end, lang)}</time> ${esc(t('getOff'))} ${esc(l.to.name)}</b></span></li>`;
+  }).join('');
+  return `<div class="summary"><b>${clock(r.start, lang)} → ${clock(r.end, lang)}</b><span>${fmtDur(r.duration, lang)}</span></div>
+    <p class="muted transit-sub">${sub}</p>
+    ${alts}${routeHazardsView(r)}
+    <ol class="list legs">${legs}</ol>
+    ${ridesView()}
+    <p class="source">${t('transitSource')}</p>`;
+}
+
+/** Grab, AirAsia Ride and inDrive buttons. Grab gets pickup and drop-off; the others get the destination on the clipboard. */
+function ridesView() {
+  if (!S.dest) return '';
+  return `<div class="rides"><div class="sh-head"><h2 style="font-size:16px">${t('ridesTitle')}</h2></div>
+    <div class="ride-btns">${RIDE_APPS.map((a) => `<button class="ride-btn" data-action="ride" data-app="${a.id}" style="--brand:${a.color};--brand-fg:${a.fg || '#FFFFFF'}">${icon('ride')}<span>${esc(a.name)}</span></button>`).join('')}</div>
+    <p class="muted ride-note">${t('ridesNote')}</p></div>`;
+}
+
+function bookRide(id) {
+  const app = RIDE_APPS.find((a) => a.id === id);
+  if (!app || !S.dest) return;
+  const from = S.start ? { lat: S.start.lat, lon: S.start.lon, name: S.start.name } : meCoords();
+  const to = { lat: S.dest.lat, lon: S.dest.lon, name: S.dest.name };
+  if (!app.fills && to.name) {
+    navigator.clipboard?.writeText(to.name).then(() => toast(t('rideCopied').replace('{s}', to.name)), () => {});
+  }
+  openRide(app, { from, to });
 }
 
 // ---------------------------------------------------------------- weather
@@ -1499,6 +1642,9 @@ document.addEventListener('click', (e) => {
   if (act === 'pt-swap') swapPoints();
   if (act === 'pt-reset-start') { S.start = null; computeRoute(); }
   if (act === 'start-nav') startNav();
+  if (act === 'mode') setMode(el.dataset.mode);
+  if (act === 'ride') bookRide(el.dataset.app);
+  if (act === 'leave-now') { S.leaveAt = ''; if (S.dest) computeRoute(); }
   if (act === 'pin-weather') openPinDialog();
   if (act === 'radar') toggleRadar();
   if (act === 'wx-retry') loadWeather(true);
