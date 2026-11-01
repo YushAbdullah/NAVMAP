@@ -20,3 +20,14 @@ export async function searchPlaces(q, near, signal) {
     seen.add(k); return true;
   });
 }
+
+// Short name for a tapped map point: the street or place name, then the area.
+export async function reverseName(lat, lon) {
+  try {
+    const res = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}&limit=1`);
+    const p = (await res.json()).features?.[0]?.properties || {};
+    const first = p.name || [p.housenumber, p.street].filter(Boolean).join(' ') || p.street;
+    const area = p.district || p.city || p.county || p.state;
+    return [first, area].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(', ');
+  } catch { return ''; }
+}
