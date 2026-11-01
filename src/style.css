@@ -545,3 +545,16 @@ button.acard-head { cursor: pointer; }
 .atext li { margin: 2px 0; }
 .atext .instr { margin-top: 8px; color: var(--text); font-weight: 500; }
 .asrc { display: block; margin: 6px 0 0 48px; font-size: 11px; color: var(--text-subtle); letter-spacing: .02em; }
+
+/* community pin trust: confirm count badge, "Still there" / "Gone" buttons */
+.report-pin { position: relative; transition: opacity .3s; }
+.report-pin .pin-n { position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--primary); color: #0B2A14; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; box-shadow: 0 0 0 2px #fff; }
+.pin-trust { display: block; color: var(--text-subtle); font-size: 12px; margin-top: 2px; }
+.votes { display: flex; gap: 8px; margin-top: 8px; }
+.votes .vote { flex: 1; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--border); background: var(--surface, #fff); border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 600; color: var(--text); }
+.votes .vote svg { width: 14px; height: 14px; }
+.votes .vote.confirm[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 25%, #fff); border-color: var(--primary); }
+.votes .vote.gone[aria-pressed="true"] { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+.list li > .votes { margin: 6px 0 2px 52px; }
+.acard-meta .votes { width: 100%; }
+.mid small.pin-trust, .pin-trust { white-space: normal; overflow: visible; text-overflow: clip; }

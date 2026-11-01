@@ -12,7 +12,7 @@
 <ul>
 <li>NAVMAP has <b>no accounts, no adverts and no tracking cookies</b>. We count visits with a cookie-free analytics tool that cannot identify you. The only sign-up is the optional email updates list, which you join only by ticking a consent box.</li>
 <li>Your <b>location stays on your phone</b>. We never save it on our servers.</li>
-<li>If you post a <b>community pin</b>, we keep its type, place and time only until it expires (1 to 12 hours) or you remove it.</li>
+<li>If you post a <b>community pin</b>, we keep its type, place and time only until it expires (usually 1 to 12 hours, up to 3 days for a landslide that other users keep confirming) or you remove it.</li>
 <li>We <b>never sell or rent</b> your data and never use it for advertising.</li>
 <li>You can ask us anything about your data at <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a>.</li>
 </ul>
@@ -62,8 +62,9 @@
 <h3>2.7 Community pins</h3>
 <p><b>What we store when you post a pin:</b> the pin type, the coordinates where you placed it, the time it was created and when it expires, and a one-way hash (a scrambled fingerprint) of your device code.</p>
 <p><b>Why:</b> to show live weather and hazard reports to other users nearby, and so that only your device can remove your pin. Other users see the pin type, place and time, never who posted it.</p>
-<p><b>How long:</b> each pin deletes itself automatically when it expires, between 1 and 12 hours depending on its type, or earlier if you press <b>Remove pin</b>.</p>
-<p><b>Spam protection:</b> to stop abuse we count pins per network for one hour. For this we store a one-way hash of your IP address for up to 1 hour. We cannot turn the hash back into your IP address.</p>
+<p><b>How long:</b> each pin deletes itself automatically when it expires, between 1 and 12 hours depending on its type, or earlier if you press <b>Remove pin</b>. When other users tap <b>Still there</b> the pin lives a little longer, but never past a fixed limit for its type (2 hours for traffic, up to 3 days for a landslide). If enough users tap <b>Gone</b>, the pin is deleted early.</p>
+<p><b>Still there / Gone votes:</b> to allow one vote per device on each pin, we store a one-way hash of the pin's id together with your device code, and your choice. Because the pin id is part of the hash, your votes on different pins cannot be linked to each other or to you. Other users only see totals (for example "Confirmed by 3"). Vote records are deleted with the pin. Your browser also remembers which button you pressed so it can show it, on your device only.</p>
+<p><b>Spam protection:</b> to stop abuse we count pins and votes per network for one hour, and votes per network on each pin while that pin is live. For this we store a one-way hash of your IP address, for up to 1 hour (or, for votes on one pin, until that pin expires). We cannot turn the hash back into your IP address.</p>
 
 <h3>2.8 SOS emergency calls</h3>
 <p>Tapping a number in the SOS window hands the call to your phone's own dialler or to WhatsApp. <b>We do not see, record or receive</b> who you call or when. The "Copy" button copies your coordinates to your own clipboard only.</p>
@@ -136,7 +137,7 @@
 <table>
 <tr><th>Data</th><th>Kept for</th></tr>
 <tr><td>Location</td><td>Not kept by us</td></tr>
-<tr><td>Community pins</td><td>1 to 12 hours, or until you remove them</td></tr>
+<tr><td>Community pins and their vote records</td><td>1 to 12 hours (up to 3 days if confirmed by others), or until you remove them or enough users mark them gone</td></tr>
 <tr><td>Hashed IP for spam limits</td><td>1 hour</td></tr>
 <tr><td>Visitor statistics</td><td>Aggregated totals, per Vercel's analytics retention</td></tr>
 <tr><td>Technical logs</td><td>According to Vercel's log retention</td></tr>
@@ -146,7 +147,7 @@
 </table>
 
 <h2>7. Keeping data accurate</h2>
-<p>Community pins are short-lived on purpose so that old reports disappear. If your pin is wrong, remove it with <b>Remove pin</b>. If you see a pin that is false or abusive, email us and we will remove it.</p>
+<p>Community pins are short-lived on purpose so that old reports disappear. If your pin is wrong, remove it with <b>Remove pin</b>. If you see someone else's pin that is no longer true, tap <b>Gone</b>; it is hidden once enough people agree. If a pin is false or abusive, you can also email us and we will remove it.</p>
 
 <h2>8. Your rights</h2>
 <p>Under the PDPA you have the right to:</p>
@@ -174,7 +175,7 @@
 <p><b>Yush Abdullah</b> (NAVMAP)<br>Email: <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a><br>Malaysia</p>
 
 <h2>Ringkasan (Bahasa Melayu)</h2>
-<p>NAVMAP tidak memerlukan pendaftaran atau akaun, tiada iklan dan tiada kuki penjejakan. Lokasi anda diproses dalam telefon anda dan tidak disimpan di pelayan kami. Jika anda meletakkan pin komuniti, kami menyimpan jenis, lokasi dan masa pin itu sehingga tamat tempoh (1 hingga 12 jam) atau sehingga anda membuangnya. Untuk mengelak spam, alamat IP disimpan dalam bentuk cincang (hash) selama 1 jam sahaja. Panggilan SOS dibuat terus oleh telefon anda dan tidak direkodkan oleh kami. Langganan e-mel adalah pilihan: e-mel anda hanya disimpan jika anda sendiri menanda kotak persetujuan, dan dipadam apabila anda berhenti melanggan. Kami mengira jumlah pelawat menggunakan Vercel Web Analytics dan pembilang harian awam kami sendiri, tanpa kuki dan tanpa mengenal pasti individu; alamat IP tidak disimpan. Kami tidak menjual data anda. Anda berhak mengakses, membetulkan dan menarik balik persetujuan di bawah Akta Perlindungan Data Peribadi 2010. Hubungi kami di <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a>; kami akan menjawab dalam tempoh 21 hari. Jika terdapat percanggahan, versi Bahasa Inggeris terpakai.</p>
+<p>NAVMAP tidak memerlukan pendaftaran atau akaun, tiada iklan dan tiada kuki penjejakan. Lokasi anda diproses dalam telefon anda dan tidak disimpan di pelayan kami. Jika anda meletakkan pin komuniti, kami menyimpan jenis, lokasi dan masa pin itu sehingga tamat tempoh (biasanya 1 hingga 12 jam, sehingga 3 hari jika disahkan pengguna lain) atau sehingga anda membuangnya. Undian "Masih ada" / "Sudah tiada" disimpan sebagai cincang sehala yang tidak boleh dikaitkan dengan anda dan dipadam bersama pin. Untuk mengelak spam, alamat IP disimpan dalam bentuk cincang (hash) selama 1 jam sahaja. Panggilan SOS dibuat terus oleh telefon anda dan tidak direkodkan oleh kami. Langganan e-mel adalah pilihan: e-mel anda hanya disimpan jika anda sendiri menanda kotak persetujuan, dan dipadam apabila anda berhenti melanggan. Kami mengira jumlah pelawat menggunakan Vercel Web Analytics dan pembilang harian awam kami sendiri, tanpa kuki dan tanpa mengenal pasti individu; alamat IP tidak disimpan. Kami tidak menjual data anda. Anda berhak mengakses, membetulkan dan menarik balik persetujuan di bawah Akta Perlindungan Data Peribadi 2010. Hubungi kami di <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a>; kami akan menjawab dalam tempoh 21 hari. Jika terdapat percanggahan, versi Bahasa Inggeris terpakai.</p>
 
 <footer>© 2026 NAVMAP by Yush Abdullah. All rights reserved. · <a href="/terms.html">Terms of Service</a> · <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a> · Map data © OpenStreetMap contributors (ODbL)</footer>
 </body></html>
