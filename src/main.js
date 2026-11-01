@@ -14,6 +14,7 @@ import { PIN_TYPES } from './lib/pin-types.js';
 import { listPins, addPin, removePin } from './lib/pins.js';
 import * as pinsMod from './lib/pins.js';
 import { getSaved, setSaved, savedKindAt, SAVED_KINDS } from './lib/saved.js';
+import { LOGO_CATS, logoUrl } from './lib/brands.js';
 import { fetchWeather, wmo, aqiLabel, AQ_LEVELS, placeName, radarFrames } from './lib/weather.js';
 import { HOTLINE_GROUPS } from './lib/hotlines.js';
 
@@ -23,6 +24,7 @@ const ALERT_REFRESH_MS = 5 * 60 * 1000;
 // ---------------------------------------------------------------- state
 const S = {
   stats: null,
+  brands: {},
   saved: getSaved(), saveMode: null,
   tab: 'explore',
   cat: null,
@@ -106,18 +108,29 @@ let destMarker = null;
 let meMarker = null;
 let reportMarkers = [];
 
-function pinEl(cls, iconName, label) {
+function pinEl(cls, iconName, label, logo = '') {
   const b = document.createElement('button');
-  b.className = `pin ${cls}`;
+  b.className = `pin ${cls}${logo ? ' has-logo' : ''}`;
   b.setAttribute('aria-label', label);
-  b.innerHTML = icon(iconName);
+  b.innerHTML = icon(iconName) + logo;
   return b;
+}
+
+// Brand logos (McDonald's, KFC, Petronas…) from brands.json, built weekly from Wikidata.
+// The category icon stays underneath, so a logo that fails to load just shows the icon.
+fetch('/data/poi/brands.json').then((r) => (r.ok ? r.json() : {})).then((b) => {
+  S.brands = b || {};
+  if (S.places.length) { drawPlaces(); render(); }
+}).catch(() => {});
+function brandLogo(p, width = 64) {
+  const b = p.brand && LOGO_CATS.includes(p.cat) && S.brands[p.brand];
+  return b ? `<img class="brand-logo" src="${esc(logoUrl(b.f, width))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.parentNode.classList.remove('has-logo');this.remove()">` : '';
 }
 
 function drawPlaces() {
   poiMarkers.forEach((m) => m.remove());
   poiMarkers = S.places.slice(0, 80).map((p) => {
-    const el = pinEl(S.selected?.id === p.id ? 'sel' : '', p.cat, p.name);
+    const el = pinEl(S.selected?.id === p.id ? 'sel' : '', p.cat, p.name, brandLogo(p));
     el.addEventListener('click', (e) => { e.stopPropagation(); selectPlace(p); });
     return new maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map);
   });
@@ -555,7 +568,7 @@ function render() {
 
 function placeRow(p) {
   return `<li><button class="row${S.selected?.id === p.id ? ' sel' : ''}" data-place="${esc(p.id)}">
-    <span class="ic">${icon(p.cat)}</span>
+    <span class="ic">${icon(p.cat)}${brandLogo(p)}</span>
     <span class="mid"><b>${esc(p.name)}</b><small>${esc(p.meta || CATEGORIES[p.cat][getLang()])}</small></span>
     <span class="end"><b>${fmtDist(p.distKm)}</b>${p.hours === '24/7' ? '<small>24h</small>' : ''}</span>
   </button></li>`;
@@ -635,7 +648,7 @@ function viewPlace() {
   const near = allAlerts().filter((a) => a.lat != null && distKm([p.lon, p.lat], [a.lon, a.lat]) < (a.radiusKm || 1) + 0.5);
   return `<div class="sh-head"><button class="link" data-action="back">${t('nearby')}</button><button class="link" data-action="back" aria-label="${t('close')}">${t('close')}</button></div>
   <div class="place">
-    <h2>${esc(p.name)}</h2>
+    <h2>${brandLogo(p, 96) ? `<span class="place-logo">${brandLogo(p, 96)}</span>` : ''}${esc(p.name)}</h2>
     <p class="meta">${[CATEGORIES[p.cat]?.[getLang()], `${fmtDist(p.distKm)} ${t('away')}`].filter(Boolean).map(esc).join(' · ')}</p>
     ${p.meta ? `<p class="meta">${esc(p.meta)}</p>` : ''}
     ${p.address && p.address !== p.meta ? `<p class="meta">${esc(p.address)}</p>` : ''}
