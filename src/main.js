@@ -9,6 +9,7 @@ import { CATEGORIES, fetchNearby, prefetchNearby } from './lib/places.js';
 import { searchPlaces } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
 import { loadAlerts } from './lib/alerts.js';
+import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
 import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voice.js';
 import { PIN_TYPES } from './lib/pin-types.js';
 import { listPins, addPin, removePin } from './lib/pins.js';
@@ -862,16 +863,41 @@ function viewAlerts() {
   const head = `<div class="sh-head"><h2>${t('alertsTitle')}</h2><small style="color:var(--text-subtle);font-size:12px">${S.alertsAt ? `${t('updated')} ${fmtAgo(S.alertsAt, lang)}` : ''}</small></div>`;
   if (S.alertMode === 'loading') return `${head}<div class="empty-state"><span class="spinner"></span></div>`;
   const sample = S.alertMode === 'sample' ? `<div class="note">${icon('accident')}<span>${t('sample')}</span></div>` : '';
-  const rows = list.length ? `<ul class="list">${list.slice(0, 150).map((a) => {
-    const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
-    const ic = a.kind === 'report' ? (a.icon || 'report') : a.kind;
-    return `<li><button class="row wrap" data-alert="${esc(a.id)}">
-      <span class="ic ${a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info'}">${icon(ic)}</span>
-      <span class="mid"><b style="font-size:15px">${esc(L(a, 'title'))}</b><small>${esc(a.place ? `${a.place} · ` : '')}${esc(L(a, 'desc'))}</small><small>${esc(a.source)} · ${esc(fmtAgo(a.time, lang))}</small></span>
-      ${d != null ? `<span class="end"><b>${fmtDist(d)}</b></span>` : ''}
-    </button></li>`;
-  }).join('')}</ul>` : `<div class="empty-state">${icon('weather')}${t('noAlerts')}</div>`;
+  const rows = list.length ? `<ul class="alist">${list.slice(0, 150).map((a) => alertCard(a, ref, lang)).join('')}</ul>` : `<div class="empty-state">${icon('weather')}${t('noAlerts')}</div>`;
   return `${head}${sample}${filters}${rows}<p class="source">${t('sourceNote')}</p>`;
+}
+
+// One alert as a card: severity + time, short title, one-line summary, state chips, valid-until,
+// and the full official text folded behind "Show details".
+function alertCard(a, ref, lang) {
+  const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
+  const ic = a.kind === 'report' ? (a.icon || 'report') : a.kind;
+  const sev = a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info';
+  const sevLabel = t(a.severity === 'danger' ? 'sevDanger' : a.severity === 'warning' ? 'sevWarning' : 'sevInfo');
+  const desc = L(a, 'desc') || '';
+  const long = a.kind === 'weather' || desc.length > 140;
+  const summary = long ? [alertSummary(desc), a.kind === 'weather' ? seaNumbers(desc, lang) : ''].filter(Boolean).join(' ') : [a.place, desc].filter(Boolean).join(' · ');
+  const states = a.kind === 'weather' ? alertStates(desc) : [];
+  const marine = a.kind === 'weather' && isMarine(desc);
+  const MAXC = 4;
+  const chips = [
+    ...(marine ? [`<span class="tag sea">${icon('wind')}${t('seaAreas')}</span>`] : []),
+    ...states.slice(0, MAXC).map((s) => `<span class="tag">${esc(s)}</span>`),
+    ...(states.length > MAXC ? [`<span class="tag more">+${states.length - MAXC}</span>`] : []),
+  ].join('');
+  const until = a.validTo ? fmtUntil(a.validTo, lang) : '';
+  const instr = L(a, 'instruction');
+  const top = `<span class="acard-top"><span class="sev ${sev}">${sevLabel}</span><span class="ago">${esc(fmtAgo(a.time, lang))}</span></span>`;
+  const main = `<span class="ic ${sev}">${icon(ic)}</span>
+      <span class="mid">${top}<b>${esc(tidyTitle(L(a, 'title')))}</b>${summary ? `<span class="sum">${esc(summary)}</span>` : ''}</span>
+      ${d != null ? `<span class="end"><b>${fmtDist(d)}</b></span>` : ''}`;
+  const headEl = a.lat != null
+    ? `<button class="acard-head" data-alert="${esc(a.id)}" aria-label="${t('showOnMap')}: ${esc(L(a, 'title'))}">${main}</button>`
+    : `<div class="acard-head">${main}</div>`;
+  const meta = (chips || until) ? `<div class="acard-meta">${chips ? `<div class="tags">${chips}</div>` : ''}${until ? `<span class="until">${icon('clock')}${t('until')} ${esc(until)}</span>` : ''}</div>` : '';
+  const details = long ? `<details class="acard-more"><summary><span class="open">${t('showDetails')}</span><span class="shut">${t('hideDetails')}</span></summary>
+      <div class="atext">${alertTextHtml(desc, esc)}${instr ? `<p class="instr">${esc(instr)}</p>` : ''}</div></details>` : '';
+  return `<li class="acard ${sev}">${headEl}${meta}${details}<small class="asrc">${esc(a.source)}</small></li>`;
 }
 
 // ---------------------------------------------------------------- live news (environment & nature)
