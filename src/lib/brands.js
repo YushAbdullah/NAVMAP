@@ -1,7 +1,7 @@
-// Brand logos for chain places (fast food, fuel). OpenStreetMap tags chains with brand:wikidata;
+// Brand logos for chain places (fast food, fuel, pharmacies). OpenStreetMap tags chains with brand:wikidata;
 // the weekly data build looks up each brand's logo on Wikidata (Wikimedia Commons file names)
 // and writes public/data/poi/brands.json as { Q-id: { n: name, f: file } }.
-export const LOGO_CATS = ['food', 'fuel'];
+export const LOGO_CATS = ['food', 'fuel', 'pharmacy'];
 
 /** Commons thumbnail for a file name, at a small width. */
 export const logoUrl = (file, width = 64) =>
