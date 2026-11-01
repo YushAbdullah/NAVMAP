@@ -96,7 +96,7 @@ const STR = {
     offlineTitle: 'You are offline.', weakTitle: 'Weak signal.', offlineBody: 'Showing the saved map, alerts and weather', offlineSaved: 'from',
     updated: 'Updated', showOnMap: 'Show on map', away: 'away', reported: 'Thanks. Your report is on the map.',
     geoDenied: 'Location is off. Using the map centre. Tip: open NAVMAP in Safari or Chrome and allow location.', fastest: 'Fastest', alt: 'Alternative', safest: 'Avoids alerts',
-    arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
+    arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', voiceStyle: 'Voice', voiceStd: 'Standard', voiceDialects: 'Malaysian dialects', voiceLangs: 'Other languages', voiceMissing: 'No voice for this on your device yet, so EN/BM is used. Add it in your phone\'s text-to-speech settings.', voiceNote: 'Dialects are read by your device\'s Malay voice. Tap a style to hear a sample.', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
     gmapsSearch: 'Cari di Google Maps', gmapsMore: 'Tiada dalam senarai?', gmapsPlace: 'Ulasan & gambar di Google Maps',
@@ -195,7 +195,7 @@ const STR = {
     offlineTitle: 'Anda di luar talian.', weakTitle: 'Isyarat lemah.', offlineBody: 'Menunjukkan peta, amaran dan cuaca yang disimpan', offlineSaved: 'dari',
     updated: 'Dikemas kini', showOnMap: 'Lihat di peta', away: 'dari sini', reported: 'Terima kasih. Laporan anda di peta.',
     geoDenied: 'Lokasi dimatikan. Menggunakan tengah peta. Tip: buka NAVMAP di Safari atau Chrome dan benarkan lokasi.', fastest: 'Terpantas', alt: 'Alternatif', safest: 'Elak amaran',
-    arrived: 'Anda telah tiba', voiceOn: 'Hidupkan suara', voiceOff: 'Senyapkan suara', hours: 'Waktu', call: 'Hubungi', inMalaysia: 'Malaysia',
+    arrived: 'Anda telah tiba', voiceOn: 'Hidupkan suara', voiceOff: 'Senyapkan suara', voiceStyle: 'Suara', voiceStd: 'Standard', voiceDialects: 'Loghat Malaysia', voiceLangs: 'Bahasa lain', voiceMissing: 'Peranti anda belum ada suara ini, jadi EN/BM digunakan. Tambah dalam tetapan teks-ke-pertuturan telefon.', voiceNote: 'Loghat dibaca oleh suara Melayu peranti anda. Ketik untuk dengar contoh.', hours: 'Waktu', call: 'Hubungi', inMalaysia: 'Malaysia',
   },
 };
 

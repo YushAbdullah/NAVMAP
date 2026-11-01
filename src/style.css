@@ -663,3 +663,18 @@ button.acard-head { cursor: pointer; }
 .veh summary svg { width: 16px; height: 16px; }
 .veh label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: var(--text-muted); font-size: 13px; }
 .veh select, .veh input { height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 15px; }
+/* Voice style picker */
+.hud-voice-pick svg { stroke-width: 2.2; }
+.voice-chip { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 10px 12px; border: 0; border-radius: 12px; background: var(--surface-muted); color: var(--text); font: inherit; font-size: 14px; text-align: left; }
+.voice-chip svg { width: 18px; height: 18px; color: var(--success); }
+.voice-chip b { font-weight: 600; }
+.voice-body { overflow-y: auto; padding: 0 20px 20px; }
+.voice-body h3 { margin: 14px 0 6px; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--text-subtle); text-transform: uppercase; }
+.voice-list { display: grid; gap: 6px; }
+.voice-opt { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 2px solid transparent; border-radius: 12px; background: var(--surface-muted); color: var(--text); font: inherit; text-align: left; }
+.voice-opt .mid { flex: 1; min-width: 0; }
+.voice-opt b { display: block; font-size: 15px; font-weight: 600; }
+.voice-opt small { display: block; font-size: 12px; color: var(--text-subtle); }
+.voice-opt[aria-checked="true"] { border-color: var(--primary); background: var(--surface-tint); }
+.voice-play { color: var(--text-subtle); }
+.voice-body .sm { margin-top: 14px; font-size: 12px; }
