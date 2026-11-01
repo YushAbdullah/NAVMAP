@@ -8,6 +8,7 @@ import { distKm, distToLineKm, fmtDist, fmtDur, fmtAgo, circle, KL, MY_BBOX } fr
 import { CATEGORIES, fetchNearby, prefetchNearby } from './lib/places.js';
 import { searchPlaces, reverseName } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
+import { measure, along, pointHazards, routeHaze, routeStates, areaWarnings, hazardCount } from './lib/route-hazards.js';
 import { loadAlerts } from './lib/alerts.js';
 import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
 import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voice.js';
@@ -282,6 +283,7 @@ async function onVote(pinId, v) {
   } catch (err) {
     toast(t(err.message === 'rate' ? 'pinVoteRate' : 'pinVoteFailed'));
   }
+  rescanRoutes();
   drawAlerts(); renderBanner(); render();
 }
 
@@ -419,15 +421,13 @@ async function computeRoute() {
   routeAbort = new AbortController();
   try {
     const routes = await getRoutes(from, [dest.lon, dest.lat], routeAbort.signal);
-    routes.forEach((r) => { r.hits = alertsOnRoute(r.coords); });
-    // Prefer a route with fewer alert hits if one exists.
-    const fastest = routes[0];
-    const safer = routes.findIndex((r) => r.hits.length < fastest.hits.length);
-    routes.forEach((r, i) => { r.label = i === 0 ? 'fastest' : (i === safer ? 'safest' : 'alt'); });
+    routes.forEach(scanRoute);
+    labelRoutes(routes);
     S.routes = routes;
     S.routeIdx = 0;
     S.routeStatus = 'ok';
     drawRoutes();
+    checkRouteArea(routes, routeAbort.signal);
     fitTo(routes[0].coords.filter((_, i, a) => i % Math.ceil(a.length / 60) === 0).concat([[dest.lon, dest.lat], from]), 16);
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -506,9 +506,101 @@ document.addEventListener('keydown', (e) => {
 });
 const toPoint = (r) => ({ id: `search-${r.id}`, name: r.name, lat: r.lat, lon: r.lon });
 
-function alertsOnRoute(coords) {
-  const sampled = coords.filter((_, i, a) => i % Math.max(1, Math.floor(a.length / 400)) === 0 || i === a.length - 1);
-  return allAlerts().filter((a) => a.lat != null && a.kind !== 'quake' && distToLineKm([a.lon, a.lat], sampled) <= (a.radiusKm || 1));
+// ---------------------------------------------------------------- hazards on the route
+/** Flood stations, community pins and state weather warnings that touch route r. */
+function scanRoute(r) {
+  r.m ||= measure(r.coords);
+  r.hits = pointHazards(r.m, allAlerts());
+  r.areas = areaWarnings(S.alerts, r.states || []);
+}
+
+// Prefer a route with fewer hazards if one exists.
+function labelRoutes(routes) {
+  const n0 = hazardCount(routes[0]);
+  const safer = routes.findIndex((r) => hazardCount(r) < n0);
+  routes.forEach((r, i) => { r.label = i === 0 ? 'fastest' : (i === safer ? 'safest' : 'alt'); });
+}
+
+/** Haze and state weather warnings need network lookups, so they arrive a moment after the route. */
+async function checkRouteArea(routes, signal) {
+  routes.forEach((r) => { r.areaStatus = 'loading'; });
+  await Promise.all(routes.map(async (r) => {
+    const [haze, states] = await Promise.all([
+      routeHaze(r.m, signal).catch(() => null),
+      routeStates(r.m, signal).catch(() => []),
+    ]);
+    r.haze = haze; r.states = states; r.areaStatus = 'ok';
+    scanRoute(r);
+  }));
+  if (signal?.aborted || S.routes !== routes) return;
+  if (!S.nav) labelRoutes(routes);
+  if (S.tab === 'drive') render();
+  if (S.nav) navAreaWarnings();
+}
+
+/** New alerts or pins arrived: refresh what each route passes. */
+function rescanRoutes() {
+  if (!S.routes.length) return;
+  S.routes.forEach(scanRoute);
+  if (S.tab === 'drive' && !S.ptEdit) render();
+}
+
+const hazIcon = (a) => a.icon || (a.kind === 'flood' ? 'flood' : a.kind === 'weather' ? 'storm' : 'accident');
+const sevCls = (s) => (s === 'danger' ? 'danger' : s === 'warning' ? 'warn' : 'info');
+
+function hazardRows(r) {
+  const lang = getLang();
+  const rows = r.hits.map(({ a, km, off }) => {
+    const where = [km < 0.5 ? t('hazAtStart') : t('hazIn').replace('{d}', fmtDist(km)), off > 0.3 ? t('hazOff').replace('{d}', fmtDist(off)) : '']
+      .filter(Boolean).join(' · ');
+    return { sev: a.severity, html: `<button class="row haz-row" data-alert="${esc(a.id)}"><span class="ic ${sevCls(a.severity)}">${icon(hazIcon(a))}</span><span class="mid"><b>${esc(L(a, 'title'))}</b><small>${esc([where, a.place].filter(Boolean).join(' · '))}</small></span></button>` };
+  });
+  if (r.haze) {
+    const lv = r.haze.level;
+    rows.push({ sev: r.haze.aqi > 150 ? 'danger' : 'warning', html: `<div class="row haz-row"><span class="ic ${r.haze.aqi > 150 ? 'danger' : 'warn'}">${icon('haze')}</span><span class="mid"><b>${esc(t('hazHaze').replace('{n}', Math.round(r.haze.aqi)))} · ${esc(lv?.[lang] || lv?.en || '')}</b><small>${esc(`${r.haze.km < 0.5 ? t('hazAtStart') : t('hazAround').replace('{d}', fmtDist(r.haze.km))} · ${t('hazHazeTip')}`)}</small></span></div>` });
+  }
+  for (const { a, states } of r.areas || []) {
+    rows.push({ sev: a.severity, html: `<button class="row haz-row" data-tab="alerts"><span class="ic ${sevCls(a.severity)}">${icon('storm')}</span><span class="mid"><b>${esc(t('hazArea').replace('{s}', states.join(', ')))}</b><small>${esc(L(a, 'title'))}</small></span></button>` });
+  }
+  return rows;
+}
+
+function routeHazardsView(r) {
+  const rows = hazardRows(r);
+  const checking = r.areaStatus === 'loading' ? `<p class="muted haz-check"><span class="spinner"></span>${t('hazChecking')}</p>` : '';
+  if (!rows.length) return `<p class="muted" style="margin-bottom:10px;color:var(--success)">${t('routeOk')}</p>${checking}`;
+  const worst = rows.some((x) => x.sev === 'danger') ? 'danger' : 'warn';
+  return `<div class="haz-box ${worst}"><div class="haz-head">${icon('accident')}<b>${t('hazTitle')}</b><span>${rows.length}</span></div>
+    <div class="list">${rows.map((x) => x.html).join('')}</div>${checking}</div>`;
+}
+
+/** Spoken once when driving starts (or when the lookups finish): haze and state warnings. */
+function navAreaWarnings() {
+  const r = S.routes[S.routeIdx];
+  if (!S.nav || !r) return;
+  const lang = getLang();
+  if (r.haze && !S.nav.alertSaid.has('haze')) {
+    S.nav.alertSaid.add('haze');
+    speak(lang === 'bm'
+      ? `Jerebu di laluan ini, indeks pencemaran ${Math.round(r.haze.aqi)}. Tutup tingkap dan guna edaran semula udara.`
+      : `Haze on this route, pollution index ${Math.round(r.haze.aqi)}. Close the windows and set the air con to recirculate.`, lang);
+  }
+  for (const { a, states } of r.areas || []) {
+    if (S.nav.alertSaid.has(a.id)) continue;
+    S.nav.alertSaid.add(a.id);
+    speak(lang === 'bm' ? `Amaran cuaca untuk ${states.join(', ')} di laluan ini.` : `Weather warning for ${states.join(', ')} on this route.`, lang);
+  }
+}
+
+/** The next hazard ahead of the driver: { a, ahead } in km, or null. */
+function nextHazard(r) {
+  if (!S.me || !r.m || !r.hits?.length) return null;
+  const me = along(r.m, S.me).km;
+  for (const h of r.hits) {
+    const ahead = h.km - me;
+    if (ahead > -0.2 - (h.a.radiusKm || 0)) return { a: h.a, ahead: Math.max(0, ahead) };
+  }
+  return null;
 }
 
 function clearRoute() {
@@ -534,6 +626,7 @@ function startNav() {
   const lang = getLang();
   speak(`${lang === 'bm' ? 'Mula navigasi.' : 'Starting navigation.'} ${stepText(r.steps[0], lang)}. ${announce(r.steps[1], r.steps[0].distance, lang)}`, lang);
   markSaid(1, r.steps[0].distance);
+  navAreaWarnings();
   if (navigator.geolocation) {
     S.nav.watchId = navigator.geolocation.watchPosition(onNavPos, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
   }
@@ -586,12 +679,23 @@ function onNavPos(pos) {
     }
   }
 
-  // Warn once when an active alert on this route is within 2 km.
-  for (const a of r.hits || []) {
-    if (S.nav.alertSaid.has(a.id) || distKm(S.me, [a.lon, a.lat]) > 2 + (a.radiusKm || 0)) continue;
-    S.nav.alertSaid.add(a.id);
-    speak(lang === 'bm' ? `Amaran di hadapan: ${L(a, 'title')}. Pandu dengan berhati-hati.` : `Alert ahead: ${L(a, 'title')}. Drive carefully.`, lang);
-    toast(`${L(a, 'title')}${a.place ? ` · ${a.place}` : ''}`);
+  // Hazards ahead on the route: a heads-up at about 3 km and again just before it.
+  const me = r.m ? along(r.m, S.me).km : 0;
+  for (const { a, km } of r.hits || []) {
+    const ahead = km - me;
+    const reach = a.radiusKm || 0;
+    if (ahead < -0.2 - reach || ahead > 3 + reach) continue;
+    const title = L(a, 'title');
+    if (ahead > 0.6 + reach) {
+      if (S.nav.alertSaid.has(`${a.id}:far`)) continue;
+      S.nav.alertSaid.add(`${a.id}:far`);
+      speak(lang === 'bm' ? `Amaran: ${title}, ${spokenDist(ahead * 1000, lang)} di hadapan.` : `Warning: ${title} ${spokenDist(ahead * 1000, lang)} ahead.`, lang);
+    } else {
+      if (S.nav.alertSaid.has(`${a.id}:near`)) continue;
+      S.nav.alertSaid.add(`${a.id}:near`); S.nav.alertSaid.add(`${a.id}:far`);
+      speak(lang === 'bm' ? `${title} di hadapan. Perlahan dan pandu dengan berhati-hati.` : `${title} ahead. Slow down and drive carefully.`, lang);
+    }
+    toast(`${title}${a.place ? ` · ${a.place}` : ''}`);
   }
 
   map.easeTo({ center: S.me, bearing: Number.isFinite(pos.coords.heading) && pos.coords.speed > 1 ? pos.coords.heading : map.getBearing(), duration: 600 });
@@ -622,7 +726,8 @@ async function reroute() {
   try {
     const routes = await getRoutes(S.me, [S.dest.lon, S.dest.lat]);
     if (!S.nav) return;
-    routes.forEach((x) => { x.hits = alertsOnRoute(x.coords); x.label = 'fastest'; });
+    const old = S.routes[S.routeIdx];
+    routes.forEach((x) => { x.states = old?.states; x.haze = old?.haze; scanRoute(x); x.label = 'fastest'; });
     S.routes = [routes[0]]; S.routeIdx = 0;
     S.nav.step = 1; S.nav.said = new Set(); S.nav.offCount = 0;
     drawRoutes();
@@ -644,6 +749,12 @@ function updateHud() {
   const remain = r.steps.slice(S.nav.step).reduce((acc, x) => ({ d: acc.d + x.distance, t: acc.t + x.duration }), { d: 0, t: 0 });
   const eta = new Date(Date.now() + remain.t * 1000).toLocaleTimeString(getLang() === 'bm' ? 'ms-MY' : 'en-MY', { hour: 'numeric', minute: '2-digit' });
   $('#hud-eta').textContent = `${fmtDur(remain.t, getLang())} · ${fmtDist(remain.d / 1000)} · ETA ${eta}`;
+  const hz = nextHazard(r), box = $('#hud-haz');
+  box.hidden = !hz || hz.ahead > 10;
+  if (!box.hidden) {
+    box.className = `hud-haz ${sevCls(hz.a.severity)}`;
+    box.innerHTML = `${icon(hazIcon(hz.a))}<span>${esc(L(hz.a, 'title'))}</span><b>${hz.ahead < 0.1 ? t('hazHere') : fmtDist(hz.ahead)}</b>`;
+  }
 }
 
 function syncVoiceBtn() {
@@ -668,6 +779,7 @@ async function refreshAlerts() {
   const d = await loadAlerts();
   S.alerts = d.alerts; S.alertMode = d.mode; S.alertsAt = d.fetchedAt;
   noteSaved('alerts', d.saved ? d.fetchedAt || d.saved : null);
+  rescanRoutes();
   drawAlerts();
   renderBanner();
   render();
@@ -869,10 +981,8 @@ function viewDrive() {
   const r = S.routes[S.routeIdx];
   if (!r) return pts;
   const alts = S.routes.length > 1 ? `<div class="alts" role="group">${S.routes.map((x, i) =>
-    `<button class="alt" data-route="${i}" aria-pressed="${i === S.routeIdx}"><b>${fmtDur(x.duration, lang)}</b>${t(x.label)} · ${fmtDist(x.distance / 1000)}${x.hits.length ? ` · ⚠ ${x.hits.length}` : ''}</button>`).join('')}</div>` : '';
-  const warn = r.hits.length
-    ? `<div class="note">${icon('accident')}<div><b>${t('routeWarn')}</b><br>${r.hits.slice(0, 3).map((a) => esc(`${L(a, 'title')}${a.place ? ` · ${a.place}` : ''}`)).join('<br>')}</div></div>`
-    : `<p class="muted" style="margin-bottom:10px;color:var(--success)">${t('routeOk')}</p>`;
+    `<button class="alt" data-route="${i}" aria-pressed="${i === S.routeIdx}"><b>${fmtDur(x.duration, lang)}</b>${t(x.label)} · ${fmtDist(x.distance / 1000)}${hazardCount(x) ? ` · ⚠ ${hazardCount(x)}` : ''}</button>`).join('')}</div>` : '';
+  const warn = routeHazardsView(r);
   const steps = r.steps.map((s) => `<li class="row"><span class="ic info">${maneuverIcon(s)}</span><span class="mid"><b style="font-size:15px;font-weight:500;white-space:normal">${esc(stepText(s, lang))}</b></span><span class="end"><small style="color:var(--text-subtle)">${s.distance ? fmtDist(s.distance / 1000) : ''}</small></span></li>`).join('');
   // Live turn-by-turn follows GPS, so it needs the route to begin where the user is.
   const go = S.start
@@ -1084,6 +1194,7 @@ async function toggleRadar(on = !S.radar) {
 // ---------------------------------------------------------------- community pins
 async function loadPins() {
   try { S.reports = await listPins(); } catch { /* keep old */ }
+  rescanRoutes();
   drawAlerts(); renderBanner();
   if (S.tab === 'weather' || S.tab === 'alerts') render();
 }
@@ -1091,7 +1202,7 @@ async function loadPins() {
 async function unpin(pinId) {
   popup?.remove();
   const ok = await removePin(pinId).catch(() => false);
-  if (ok) { S.reports = S.reports.filter((r) => r.pinId !== pinId); toast(t('unpinned')); }
+  if (ok) { S.reports = S.reports.filter((r) => r.pinId !== pinId); rescanRoutes(); toast(t('unpinned')); }
   else toast(t('unpinFailed'));
   drawAlerts(); renderBanner(); render();
 }
@@ -1573,6 +1684,7 @@ $('#report-grid').addEventListener('click', async (e) => {
   try {
     const r = await addPin(b.dataset.report, c[1], c[0]);
     S.reports = [...S.reports.filter((x) => x.id !== r.id), r];
+    rescanRoutes();
     drawAlerts(); renderBanner(); render();
     toast(r.merged ? t('pinMerged') : pinsMod.shared ? t('pinnedShared') : t('pinnedLocal'));
     const g = award('pin');
