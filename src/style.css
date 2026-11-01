@@ -426,3 +426,11 @@ body.navigating .sos-fab { bottom: 24px; }
 .save-row .tag.ok { display: inline-flex; align-items: center; gap: 6px; color: var(--success); }
 .save-row .pulse { border-color: var(--success); box-shadow: 0 0 0 3px rgba(28,187,108,.18); }
 .pin.saved { background: #fff; color: var(--ink); border-color: var(--ink); border-radius: 12px; }
+
+/* ---------- Emergency places ---------- */
+.sos-near { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sos-near .btn-ghost { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.sos-near svg { width: 18px; height: 18px; }
+.note-card { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: #FFF6DB; color: #5C4600; font-size: 13px; line-height: 1.45; }
+.note-card svg { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+.note-card a { color: inherit; font-weight: 600; }

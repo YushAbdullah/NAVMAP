@@ -603,7 +603,7 @@ function viewExplore() {
   if (S.placesStatus === 'empty') return `${head}<div class="empty-state">${icon('search')}${t('none')}<button class="btn-ghost" data-action="retry">${t('searchArea')}</button>${gmapsBtn(S.cat)}</div>`;
   const list = S.showAll ? S.places : S.places.slice(0, 3);
   const first = S.places[0];
-  return `${head}<ul class="list">${list.map(placeRow).join('')}</ul>
+  return `${head}${S.cat === 'shelter' ? shelterNote() : ''}<ul class="list">${list.map(placeRow).join('')}</ul>
     <div class="btns"><button class="btn" data-action="go" data-place="${esc(first.id)}">${icon('nav')}${t('directions')}: ${esc(first.name)}</button></div>
     <p class="gmaps-row">${t('gmapsMore')} ${gmapsBtn(S.cat)}</p>`;
 }
@@ -613,6 +613,7 @@ function viewExplore() {
 const GMAPS_Q = {
   ev: 'EV charging station', fuel: 'petrol station', food: 'fast food', toilet: 'public toilet',
   surau: 'surau masjid', hospital: 'hospital klinik', workshop: 'car workshop bengkel kereta',
+  police: 'balai polis', fire: 'balai bomba', shelter: 'pusat pemindahan banjir',
 };
 function gmapsSearchUrl(cat) {
   const c = S.placesCenter || center();
@@ -624,6 +625,10 @@ function quickGrid() {
   return `<div class="report-grid" style="margin-top:14px">${Object.entries(CATEGORIES).map(([k, c]) =>
     `<button data-cat="${k}"><span class="row" style="padding:0;background:none;width:auto"><span class="ic">${icon(k)}</span></span>${esc(c[getLang()])}</button>`).join('')}</div>`;
 }
+
+// Shelters from OpenStreetMap are permanent places; which relief centres are open in a flood is
+// announced by JKM, so point people to the official list too.
+const shelterNote = () => `<p class="note-card">${icon('shelter')}<span>${t('shelterNote')} <a href="https://infobencanajkm.jkm.gov.my/" target="_blank" rel="noopener">InfoBencana JKM</a></span></p>`;
 
 function viewPlace() {
   const p = S.selected;
@@ -1311,6 +1316,9 @@ function renderSos() {
     </section>`).join('');
   $('#sos-body').innerHTML = `<a class="sos-999" href="tel:999">${icon('phone')}<span><b>999</b><small>${t('sosLead')}</small></span></a>
     <div class="sos-loc"><small>${t('myCoords')}</small>${me ? `<div><b>${me}</b><button class="btn-ghost sm" data-sos-copy="${me}">${icon('copy')}${t('copy')}</button></div>` : `<p class="muted sm">${t('locUnknown')}</p>`}</div>
+    <section class="sos-group"><h3>${icon('pin')}${t('sosNearest')}</h3>
+      <div class="sos-near">${['hospital', 'police', 'fire', 'shelter'].map((c) => `<button class="btn-ghost" data-sos-cat="${c}">${icon(c)}${esc(CATEGORIES[c].short[lang])}</button>`).join('')}</div>
+    </section>
     ${groups}
     <p class="source">${t('sosNote')}</p>
     <p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`;
@@ -1322,6 +1330,8 @@ sosDlg.addEventListener('click', async (e) => {
   const cp = e.target.closest('[data-sos-copy]');
   if (cp) { try { await navigator.clipboard.writeText(cp.dataset.sosCopy); toast(t('copied')); } catch { /* ignore */ } return; }
   if (e.target.closest('[data-sos-workshop]')) { sosDlg.close(); openSheet(); loadPlaces('workshop'); }
+  const near = e.target.closest('[data-sos-cat]');
+  if (near) { sosDlg.close(); openSheet(); loadPlaces(near.dataset.sosCat); }
 });
 $('#radar-fab').addEventListener('click', () => toggleRadar());
 

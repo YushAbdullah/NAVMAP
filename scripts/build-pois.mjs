@@ -2,7 +2,7 @@
 // Output: public/data/poi/<cat>/<lat>_<lon>.json (1° cells) + public/data/poi/index.json
 // Run: node scripts/build-pois.mjs   (runs weekly in .github/workflows/update-places.yml)
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { CATEGORIES, OVERPASS, toPlace, cellKey, packPlace } from '../src/lib/places.js';
+import { CATEGORIES, OVERPASS, toPlace, cellKey, packPlace, qUnion } from '../src/lib/places.js';
 
 const OUT = new URL('../public/data/poi/', import.meta.url);
 const MALAYSIA_AREA = 3602108121; // OSM relation 2108121 (Malaysia) as an Overpass area id
@@ -39,11 +39,11 @@ async function query(q) {
 const index = { updatedAt: new Date().toISOString(), cellDeg: 1, counts: {}, cells: {} };
 let failed = 0;
 
-for (const [cat, c] of Object.entries(CATEGORIES)) {
+for (const cat of Object.keys(CATEGORIES)) {
   console.log(`Fetching ${cat}…`);
   let elements;
   try {
-    elements = await query(`[out:json][timeout:280];area(id:${MALAYSIA_AREA})->.my;(${c.q}(area.my););out center tags;`);
+    elements = await query(`[out:json][timeout:280];area(id:${MALAYSIA_AREA})->.my;(${qUnion(cat, '(area.my)')});out center tags;`);
   } catch (e) {
     console.error(`  FAILED ${cat}: ${e.message}`);
     failed++;
