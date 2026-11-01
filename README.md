@@ -10,6 +10,8 @@ It is a Progressive Web App (PWA): it works in any browser and can be installed 
 |---|---|---|
 | Live map | [MapLibre GL](https://maplibre.org) + [OpenFreeMap](https://openfreemap.org) tiles (OpenStreetMap data) | Free, no key |
 | Satellite view | Layers button → Satellite: [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) raster under the OpenFreeMap labels (hybrid). Choice saved in `localStorage` | Free with attribution; for commercial or high-volume use, get an ArcGIS Location Platform key or swap `SAT_TILES` in `src/main.js` |
+| Home & Work | `src/lib/saved.js`: saved on the device only (`localStorage` `navmap.saved`). Set from the current location or any place card ("Save as Home/Work"); one tap routes there | Free |
+| Play view | Layers button → Play: bright blocky style (stepped 3D buildings in toy colours, block-character avatar, tilted camera) restyled client-side from the same OpenFreeMap tiles (`src/lib/play.js`). Points and badges for pinning hazards and starting trips, kept in `localStorage` only (`src/lib/score.js`) | No extra service |
 | Place search | [Photon](https://photon.komoot.io) geocoder, limited to Malaysia | Free, no key |
 | Nearby EV, fuel, fast food, toilets, surau, hospitals | Preloaded for all of Malaysia from OpenStreetMap (`public/data/poi`, refreshed weekly by the *Update places data* GitHub Action), live [Overpass](https://overpass-api.de) as fallback | Free, no key |
 | Driving directions + alternatives | [OSRM](https://project-osrm.org) public demo server | Free, demo only (see below) |
@@ -27,6 +29,8 @@ It is a Progressive Web App (PWA): it works in any browser and can be installed 
 | Visitor analytics (cookieless) | Vercel Web Analytics script in `index.html`; turn on in Vercel → Project → Analytics | Free (Hobby limits) |
 | Public visitor counter | `api/stats.js`: daily HyperLogLog in the same Upstash Redis (`navmap:v:<date>`, Malaysia time, kept 40 days). Shows "N visitors today · N live pins" above the footer. Stores no IP or identifier; skips bots and browsers sending Do Not Track / GPC | Free |
 | Car workshops & tyre shops nearby | Overpass (`shop=car_repair`/`tyres`) | Free, no key |
+| Emergency places: police, Bomba, evacuation shelters | Overpass (`amenity=police`, `amenity=fire_station`; shelters = `emergency=assembly_point`/`evacuation_centre`, `social_facility=shelter`, or names with "Pusat Pemindahan"). Also "Nearest help" buttons in the SOS sheet, plus a link to InfoBencana JKM for relief centres open during floods | Free, no key |
+| Brand logos (fast food, fuel) | OSM `brand:wikidata` → Wikidata logo (P8972/P154) → Wikimedia Commons thumbnail. Looked up in the weekly build (`src/lib/brands.js`, writes `public/data/poi/brands.json`); falls back to the category icon | Free, no key |
 | BM / EN | Toggle in the search bar | – |
 
 If the alert feeds cannot be reached, the app shows **clearly labelled sample alerts** instead of failing silently.

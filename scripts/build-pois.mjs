@@ -2,7 +2,8 @@
 // Output: public/data/poi/<cat>/<lat>_<lon>.json (1° cells) + public/data/poi/index.json
 // Run: node scripts/build-pois.mjs   (runs weekly in .github/workflows/update-places.yml)
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { CATEGORIES, OVERPASS, toPlace, cellKey, packPlace } from '../src/lib/places.js';
+import { CATEGORIES, OVERPASS, toPlace, cellKey, packPlace, qUnion } from '../src/lib/places.js';
+import { LOGO_CATS, fetchBrandLogos } from '../src/lib/brands.js';
 
 const OUT = new URL('../public/data/poi/', import.meta.url);
 const MALAYSIA_AREA = 3602108121; // OSM relation 2108121 (Malaysia) as an Overpass area id
@@ -37,13 +38,14 @@ async function query(q) {
 }
 
 const index = { updatedAt: new Date().toISOString(), cellDeg: 1, counts: {}, cells: {} };
+const brandIds = new Set();
 let failed = 0;
 
-for (const [cat, c] of Object.entries(CATEGORIES)) {
+for (const cat of Object.keys(CATEGORIES)) {
   console.log(`Fetching ${cat}…`);
   let elements;
   try {
-    elements = await query(`[out:json][timeout:280];area(id:${MALAYSIA_AREA})->.my;(${c.q}(area.my););out center tags;`);
+    elements = await query(`[out:json][timeout:280];area(id:${MALAYSIA_AREA})->.my;(${qUnion(cat, '(area.my)')});out center tags;`);
   } catch (e) {
     console.error(`  FAILED ${cat}: ${e.message}`);
     failed++;
@@ -53,6 +55,7 @@ for (const [cat, c] of Object.entries(CATEGORIES)) {
   for (const el of elements) {
     const p = toPlace(el, cat);
     if (!p) continue;
+    if (p.brand && LOGO_CATS.includes(cat)) brandIds.add(p.brand); else p.brand = '';
     const k = cellKey(p.lat, p.lon);
     if (!grid.has(k)) grid.set(k, []);
     grid.get(k).push(packPlace(p));
@@ -78,6 +81,15 @@ if (failed) {
     const old = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('index.json', OUT), 'utf8'));
     for (const cat of Object.keys(CATEGORIES)) if (!index.cells[cat] && old.cells?.[cat]) { index.cells[cat] = old.cells[cat]; index.counts[cat] = old.counts?.[cat]; }
   } catch { /* no previous index */ }
+}
+// Brand logos (Wikidata). Optional: on failure keep the previous brands.json.
+try {
+  const brands = await fetchBrandLogos([...brandIds]);
+  await writeFile(new URL('brands.json', OUT), JSON.stringify(brands));
+  index.brands = Object.keys(brands).length;
+  console.log(`  ${index.brands} brand logos for ${brandIds.size} brands`);
+} catch (e) {
+  console.warn('  brand logos skipped:', e.message);
 }
 await writeFile(new URL('index.json', OUT), JSON.stringify(index, null, 1));
 console.log('Done', index.counts);

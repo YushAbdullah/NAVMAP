@@ -17,6 +17,13 @@ export const CATEGORIES = {
   toilet:   { en: 'Toilets', bm: 'Tandas', short: { en: 'Toilets', bm: 'Tandas' }, q: 'nwr["amenity"="toilets"]' },
   surau:    { en: 'Surau & masjid', bm: 'Surau & masjid', short: { en: 'Surau', bm: 'Surau' }, q: 'nwr["amenity"="place_of_worship"]["religion"="muslim"]' },
   hospital: { en: 'Hospitals & clinics', bm: 'Hospital & klinik', short: { en: 'Hospitals', bm: 'Hospital' }, q: 'nwr["amenity"~"^(hospital|clinic)$"]' },
+  // Pharmacies and chemists: every chain (Watsons, Guardian, Caring, AA, Big, Alpro, Health Lane, Multicare...) and independents.
+  pharmacy: { en: 'Pharmacies', bm: 'Farmasi', short: { en: 'Pharmacy', bm: 'Farmasi' }, q: ['nwr["amenity"="pharmacy"]', 'nwr["shop"="chemist"]'] },
+  police:   { en: 'Police stations', bm: 'Balai polis', short: { en: 'Police', bm: 'Polis' }, q: 'nwr["amenity"="police"]' },
+  fire:     { en: 'Fire stations (Bomba)', bm: 'Balai bomba', short: { en: 'Bomba', bm: 'Bomba' }, q: 'nwr["amenity"="fire_station"]' },
+  // Evacuation and relief centres. OSM has few in Malaysia, so names like "Pusat Pemindahan" count too.
+  shelter:  { en: 'Evacuation shelters', bm: 'Pusat pemindahan', short: { en: 'Shelters', bm: 'Pemindahan' },
+    q: ['nwr["emergency"~"^(assembly_point|evacuation_centre)$"]', 'nwr["social_facility"="shelter"]', 'nwr["name"~"pusat pemindahan|evacuation cent",i]'] },
   workshop: { en: 'Car workshops & tyres', bm: 'Bengkel kereta & tayar', short: { en: 'Workshop', bm: 'Bengkel' }, q: 'nwr["shop"~"^(car_repair|tyres)$"]' },
 };
 
@@ -25,8 +32,11 @@ export const RADIUS_M = 4000;
 /** Snap a centre to a ~1 km grid so nearby requests share a cache entry. */
 export const snap = (v) => Math.round(v * 100) / 100;
 
+/** Overpass union statements for a category, each followed by the area filter. */
+export const qUnion = (cat, filter) => [].concat(CATEGORIES[cat].q).map((s) => `${s}${filter};`).join('');
+
 export function overpassQuery(cat, lat, lon, radiusM = RADIUS_M) {
-  return `[out:json][timeout:12];(${CATEGORIES[cat].q}(around:${radiusM},${lat},${lon}););out center tags 60;`;
+  return `[out:json][timeout:12];(${qUnion(cat, `(around:${radiusM},${lat},${lon})`)});out center tags 60;`;
 }
 
 /** Race all mirrors; resolve with the first good JSON answer. */
@@ -84,8 +94,8 @@ const cache = new Map();
 // Built weekly by scripts/build-pois.mjs (GitHub Action). Served from the CDN, so it is instant.
 export const CELL_DEG = 1;
 export const cellKey = (lat, lon) => `${Math.floor(lat / CELL_DEG)}_${Math.floor(lon / CELL_DEG)}`;
-export const packPlace = (p) => [p.id, p.name, +p.lat.toFixed(5), +p.lon.toFixed(5), p.meta, p.address, p.hours, p.phone, p.website];
-const unpack = (a, cat) => ({ id: a[0], cat, name: a[1] || (cat === 'workshop' ? 'Car workshop' : CATEGORIES[cat]?.en || 'Place'), lat: a[2], lon: a[3], meta: a[4] || '', address: a[5] || '', hours: a[6] || '', phone: a[7] || '', website: a[8] || '' });
+export const packPlace = (p) => { const a = [p.id, p.name, +p.lat.toFixed(5), +p.lon.toFixed(5), p.meta, p.address, p.hours, p.phone, p.website]; if (p.brand) a.push(p.brand); return a; };
+const unpack = (a, cat) => ({ id: a[0], cat, name: a[1] || ({ workshop: 'Car workshop', pharmacy: 'Pharmacy', police: 'Police station', fire: 'Fire station', shelter: 'Evacuation shelter' }[cat] || CATEGORIES[cat]?.en || 'Place'), lat: a[2], lon: a[3], meta: a[4] || '', address: a[5] || '', hours: a[6] || '', phone: a[7] || '', website: a[8] || '', brand: a[9] || '' });
 
 let manifestP = null;
 function manifest() {
@@ -153,7 +163,7 @@ export function toPlace(el, cat) {
   const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
   if (lat == null || lon == null) return null;
   const t = el.tags || {};
-  const fallback = { ev: 'EV charger', fuel: 'Fuel station', food: 'Fast food', toilet: 'Public toilet', surau: 'Surau', hospital: t.amenity === 'clinic' ? 'Clinic' : 'Hospital', workshop: t.shop === 'tyres' ? 'Tyre shop' : 'Car workshop' }[cat] || CATEGORIES[cat]?.en || 'Place';
+  const fallback = { ev: 'EV charger', fuel: 'Fuel station', food: 'Fast food', toilet: 'Public toilet', surau: 'Surau', hospital: t.amenity === 'clinic' ? 'Clinic' : 'Hospital', pharmacy: 'Pharmacy', police: 'Police station', fire: 'Fire station', shelter: 'Evacuation shelter', workshop: t.shop === 'tyres' ? 'Tyre shop' : 'Car workshop' }[cat] || CATEGORIES[cat]?.en || 'Place';
   const name = t.name || t['name:en'] || t['name:ms'] || t.brand || t.operator || fallback;
   const meta = [];
   if (cat === 'ev') {
@@ -172,6 +182,14 @@ export function toPlace(el, cat) {
   } else if (cat === 'toilet') {
     if (t.wheelchair === 'yes') meta.push('Accessible');
     if (t.fee === 'yes') meta.push('Paid'); else if (t.fee === 'no') meta.push('Free');
+  } else if (cat === 'police' || cat === 'fire') {
+    if (t.operator && t.operator !== name) meta.push(t.operator);
+  } else if (cat === 'shelter') {
+    if (t.capacity) meta.push(`Capacity ${t.capacity}`);
+    if (t.operator) meta.push(t.operator);
+  } else if (cat === 'pharmacy') {
+    if (t.brand && t.brand !== name) meta.push(t.brand);
+    if (t.dispensing === 'yes') meta.push('Dispensing');
   } else if (cat === 'hospital') {
     if (t.emergency === 'yes') meta.push('Emergency');
     if (t['healthcare:speciality']) meta.push(t['healthcare:speciality'].split(';')[0]);
@@ -184,5 +202,6 @@ export function toPlace(el, cat) {
     hours: t.opening_hours || '',
     phone: t.phone || t['contact:phone'] || '',
     website: t.website || t['contact:website'] || '',
+    brand: /^Q\d+$/.test(t['brand:wikidata'] || '') ? t['brand:wikidata'] : '',
   };
 }

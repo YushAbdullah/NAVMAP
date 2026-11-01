@@ -9,10 +9,15 @@ import { CATEGORIES, fetchNearby, prefetchNearby } from './lib/places.js';
 import { searchPlaces, reverseName } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
 import { loadAlerts } from './lib/alerts.js';
+import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
 import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voice.js';
 import { PIN_TYPES } from './lib/pin-types.js';
 import { listPins, addPin, removePin } from './lib/pins.js';
+import { applyPlay, PLAY_PITCH } from './lib/play.js';
+import { award, getScore, levelOf, LEVEL_PTS, BADGES } from './lib/score.js';
 import * as pinsMod from './lib/pins.js';
+import { getSaved, setSaved, savedKindAt, SAVED_KINDS } from './lib/saved.js';
+import { LOGO_CATS, logoUrl } from './lib/brands.js';
 import { fetchWeather, wmo, aqiLabel, AQ_LEVELS, placeName, radarFrames } from './lib/weather.js';
 import { HOTLINE_GROUPS } from './lib/hotlines.js';
 
@@ -22,6 +27,8 @@ const ALERT_REFRESH_MS = 5 * 60 * 1000;
 // ---------------------------------------------------------------- state
 const S = {
   stats: null,
+  brands: {},
+  saved: getSaved(), saveMode: null,
   tab: 'explore',
   cat: null,
   places: [], placesStatus: 'idle', showAll: false, placesCenter: null,
@@ -108,19 +115,42 @@ let startMarker = null;
 let meMarker = null;
 let reportMarkers = [];
 
-function pinEl(cls, iconName, label) {
+function pinEl(cls, iconName, label, logo = '') {
   const b = document.createElement('button');
-  b.className = `pin ${cls}`;
+  b.className = `pin ${cls}${logo ? ' has-logo' : ''}`;
   b.setAttribute('aria-label', label);
-  b.innerHTML = icon(iconName);
+  b.innerHTML = icon(iconName) + logo;
   return b;
+}
+
+// Brand logos (McDonald's, KFC, Petronas…) from brands.json, built weekly from Wikidata.
+// The category icon stays underneath, so a logo that fails to load just shows the icon.
+fetch('/data/poi/brands.json').then((r) => (r.ok ? r.json() : {})).then((b) => {
+  S.brands = b || {};
+  if (S.places.length) { drawPlaces(); render(); }
+}).catch(() => {});
+function brandLogo(p, width = 64) {
+  const b = p.brand && LOGO_CATS.includes(p.cat) && S.brands[p.brand];
+  return b ? `<img class="brand-logo" src="${esc(logoUrl(b.f, width))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.parentNode.classList.remove('has-logo');this.remove()">` : '';
 }
 
 function drawPlaces() {
   poiMarkers.forEach((m) => m.remove());
   poiMarkers = S.places.slice(0, 80).map((p) => {
-    const el = pinEl(S.selected?.id === p.id ? 'sel' : '', p.cat, p.name);
+    const el = pinEl(S.selected?.id === p.id ? 'sel' : '', p.cat, p.name, brandLogo(p));
     el.addEventListener('click', (e) => { e.stopPropagation(); selectPlace(p); });
+    return new maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map);
+  });
+}
+
+// Home / Work markers
+let savedMarkers = [];
+function drawSaved() {
+  savedMarkers.forEach((m) => m.remove());
+  savedMarkers = SAVED_KINDS.filter((k) => S.saved[k]).map((k) => {
+    const p = S.saved[k];
+    const el = pinEl('saved', k, `${savedLabel(k)}: ${p.name}`);
+    el.addEventListener('click', (e) => { e.stopPropagation(); selectPlace(savedPlace(k)); });
     return new maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map);
   });
 }
@@ -439,8 +469,10 @@ function startNav() {
   if (navigator.geolocation) {
     S.nav.watchId = navigator.geolocation.watchPosition(onNavPos, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
   }
-  map.easeTo({ center: S.me || r.coords[0], zoom: 16.5, pitch: 45, padding: mapPadding(), duration: 800 });
+  map.easeTo({ center: S.me || r.coords[0], zoom: 16.5, pitch: isPlay() ? PLAY_PITCH : 45, padding: mapPadding(), duration: 800 });
   updateHud();
+  const g = award('nav');
+  if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 3400);
 }
 
 /** "In 500 metres, turn left onto Jalan Pudu" */
@@ -560,7 +592,7 @@ function stopNav() {
   if (voiceSupported()) speechSynthesis.cancel();
   document.body.classList.remove('navigating');
   $('#hud').hidden = true;
-  map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+  map.easeTo({ pitch: isPlay() ? PLAY_PITCH : 0, bearing: 0, duration: 600 });
 }
 
 // ---------------------------------------------------------------- alerts
@@ -634,15 +666,46 @@ function render() {
 
 function placeRow(p) {
   return `<li><button class="row${S.selected?.id === p.id ? ' sel' : ''}" data-place="${esc(p.id)}">
-    <span class="ic">${icon(p.cat)}</span>
+    <span class="ic">${icon(p.cat)}${brandLogo(p)}</span>
     <span class="mid"><b>${esc(p.name)}</b><small>${esc(p.meta || CATEGORIES[p.cat][getLang()])}</small></span>
     <span class="end"><b>${fmtDist(p.distKm)}</b>${p.hours === '24/7' ? '<small>24h</small>' : ''}</span>
   </button></li>`;
 }
 
+// ---------------------------------------------------------------- saved places (Home, Work)
+const savedLabel = (k) => t(k === 'home' ? 'savedHome' : 'savedWork');
+const tk = (key, k) => t(key).replace('{k}', savedLabel(k));
+const savedPlace = (k) => {
+  const p = S.saved[k];
+  return { id: `saved-${k}`, cat: k, name: p.name || savedLabel(k), lat: p.lat, lon: p.lon, meta: savedLabel(k), distKm: distKm(S.me || center(), [p.lon, p.lat]) };
+};
+function savedBar() {
+  const cards = SAVED_KINDS.map((k) => {
+    const p = S.saved[k];
+    if (!p) return `<div class="saved-card empty"><button class="saved-go" data-action="saved-set" data-kind="${k}"><span class="ic">${icon(k)}</span><span class="mid"><b>${tk(k === 'home' ? 'setHome' : 'setWork', k)}</b></span></button></div>`;
+    const d = S.me ? fmtDist(distKm(S.me, [p.lon, p.lat])) : '';
+    return `<div class="saved-card"><button class="saved-go" data-action="saved-go" data-kind="${k}" aria-label="${t('directions')}: ${esc(savedLabel(k))}"><span class="ic">${icon(k)}</span><span class="mid"><b>${esc(savedLabel(k))}</b><small>${esc([d, p.name].filter(Boolean).join(' · '))}</small></span></button><button class="saved-edit" data-action="saved-set" data-kind="${k}" aria-label="${t('saveChange')} ${esc(savedLabel(k))}">${icon('edit')}</button></div>`;
+  }).join('');
+  const k = S.saveMode;
+  const panel = k ? `<div class="save-panel" role="group" aria-label="${esc(tk('saveSetTitle', k))}">
+      <b>${esc(tk('saveSetTitle', k))}</b>
+      <button class="btn-ghost" data-action="saved-loc" data-kind="${k}">${icon('locate')}${t('saveUseLoc')}</button>
+      <button class="btn-ghost" data-action="saved-search" data-kind="${k}">${icon('search')}${t('saveSearch')}</button>
+      <div class="save-panel-foot">${S.saved[k] ? `<button class="link danger" data-action="saved-remove" data-kind="${k}">${t('saveRemove')}</button>` : '<span></span>'}<button class="link" data-action="saved-cancel">${t('cancel')}</button></div>
+      <small class="muted">${t('savedNote')}</small>
+    </div>` : '';
+  return `<div class="saved-bar">${cards}</div>${panel}`;
+}
+function saveButtons(p) {
+  const at = savedKindAt(S.saved, p.lat, p.lon);
+  return `<div class="save-row">${SAVED_KINDS.map((k) => (at === k
+    ? `<span class="tag ok">${icon(k)}${tk(k === 'home' ? 'savedAsHome' : 'savedAsWork', k)}</span>`
+    : `<button class="btn-ghost sm${S.saveMode === k ? ' pulse' : ''}" data-action="save-place" data-kind="${k}">${icon(k)}${tk(k === 'home' ? 'saveAsHome' : 'saveAsWork', k)}</button>`)).join('')}</div>`;
+}
+
 function viewExplore() {
   if (!S.cat) {
-    return `<div class="sh-head"><h2>${t('pickCat')}</h2></div><p class="muted">${t('pickCatHint')}</p>${quickGrid()}<div class="sub-card"><span class="sub-ic">${icon('mail')}</span><span class="mid"><b>${t('subTitle')}</b><small>${t('subCard')}</small></span><button class="btn sm" data-action="subscribe">${t('subBtn')}</button></div>`;
+    return `${savedBar()}<div class="sh-head"><h2>${t('pickCat')}</h2></div><p class="muted">${t('pickCatHint')}</p>${quickGrid()}<div class="sub-card"><span class="sub-ic">${icon('mail')}</span><span class="mid"><b>${t('subTitle')}</b><small>${t('subCard')}</small></span><button class="btn sm" data-action="subscribe">${t('subBtn')}</button></div>`;
   }
   const c = CATEGORIES[S.cat];
   const head = `<div class="sh-head"><h2>${esc(c[getLang()])} ${t('nearby').toLowerCase()}</h2>${S.places.length > 3 ? `<button class="link" data-action="toggle-all">${S.showAll ? t('showLess') : `${t('seeAll')} (${S.places.length})`}</button>` : ''}</div>`;
@@ -651,7 +714,7 @@ function viewExplore() {
   if (S.placesStatus === 'empty') return `${head}<div class="empty-state">${icon('search')}${t('none')}<button class="btn-ghost" data-action="retry">${t('searchArea')}</button>${gmapsBtn(S.cat)}</div>`;
   const list = S.showAll ? S.places : S.places.slice(0, 3);
   const first = S.places[0];
-  return `${head}<ul class="list">${list.map(placeRow).join('')}</ul>
+  return `${head}${S.cat === 'shelter' ? shelterNote() : ''}<ul class="list">${list.map(placeRow).join('')}</ul>
     <div class="btns"><button class="btn" data-action="go" data-place="${esc(first.id)}">${icon('nav')}${t('directions')}: ${esc(first.name)}</button></div>
     <p class="gmaps-row">${t('gmapsMore')} ${gmapsBtn(S.cat)}</p>`;
 }
@@ -660,7 +723,8 @@ function viewExplore() {
 // area being viewed. Uses the official Maps URLs, so no API key, no cost, and no Google data on our map.
 const GMAPS_Q = {
   ev: 'EV charging station', fuel: 'petrol station', food: 'fast food', toilet: 'public toilet',
-  surau: 'surau masjid', hospital: 'hospital klinik', workshop: 'car workshop bengkel kereta',
+  surau: 'surau masjid', hospital: 'hospital klinik', pharmacy: 'farmasi pharmacy', workshop: 'car workshop bengkel kereta',
+  police: 'balai polis', fire: 'balai bomba', shelter: 'pusat pemindahan banjir',
 };
 function gmapsSearchUrl(cat) {
   const c = S.placesCenter || center();
@@ -673,15 +737,20 @@ function quickGrid() {
     `<button data-cat="${k}"><span class="row" style="padding:0;background:none;width:auto"><span class="ic">${icon(k)}</span></span>${esc(c[getLang()])}</button>`).join('')}</div>`;
 }
 
+// Shelters from OpenStreetMap are permanent places; which relief centres are open in a flood is
+// announced by JKM, so point people to the official list too.
+const shelterNote = () => `<p class="note-card">${icon('shelter')}<span>${t('shelterNote')} <a href="https://infobencanajkm.jkm.gov.my/" target="_blank" rel="noopener">InfoBencana JKM</a></span></p>`;
+
 function viewPlace() {
   const p = S.selected;
   const near = allAlerts().filter((a) => a.lat != null && distKm([p.lon, p.lat], [a.lon, a.lat]) < (a.radiusKm || 1) + 0.5);
   return `<div class="sh-head"><button class="link" data-action="back">${t('nearby')}</button><button class="link" data-action="back" aria-label="${t('close')}">${t('close')}</button></div>
   <div class="place">
-    <h2>${esc(p.name)}</h2>
+    <h2>${brandLogo(p, 96) ? `<span class="place-logo">${brandLogo(p, 96)}</span>` : ''}${esc(p.name)}</h2>
     <p class="meta">${[CATEGORIES[p.cat]?.[getLang()], `${fmtDist(p.distKm)} ${t('away')}`].filter(Boolean).map(esc).join(' · ')}</p>
     ${p.meta ? `<p class="meta">${esc(p.meta)}</p>` : ''}
     ${p.address && p.address !== p.meta ? `<p class="meta">${esc(p.address)}</p>` : ''}
+    ${saveButtons(p)}
     <div class="tags">
       ${p.hours ? `<span class="tag">${t('hours')}: ${esc(p.hours)}</span>` : ''}
       ${near.map((a) => `<span class="tag ${a.severity === 'danger' ? 'danger' : 'warn'}">${esc(L(a, 'title'))}</span>`).join('')}
@@ -706,6 +775,7 @@ function ptRow(which) {
       <ul class="list pt-results" id="pt-results">
         <li><button type="button" class="row" data-action="pt-me"><span class="ic">${icon('nav')}</span><span class="mid"><b>${t('myLocation')}</b></span></button></li>
         <li><button type="button" class="row" data-action="pt-map"><span class="ic">${icon('pin')}</span><span class="mid"><b>${t('pickOnMap')}</b></span></button></li>
+        ${SAVED_KINDS.filter((k) => S.saved[k]).map((k) => `<li><button type="button" class="row" data-action="pt-saved" data-kind="${k}"><span class="ic">${icon(k)}</span><span class="mid"><b>${esc(savedLabel(k))}</b><small>${esc(S.saved[k].name || '')}</small></span></button></li>`).join('')}
       </ul></div>`;
   }
   const name = isStart
@@ -722,7 +792,7 @@ function viewDrive() {
   const lang = getLang();
   const pts = `<div class="route-pts">${ptRow('start')}${ptRow('end')}${S.dest && !S.ptEdit ? `<button class="pt-swap" data-action="pt-swap" aria-label="${t('swap')}" title="${t('swap')}">${icon('swap')}</button>` : ''}</div>`;
   if (!S.dest) {
-    return `<div class="sh-head"><h2>${t('noDest')}</h2></div>${pts}${S.ptEdit ? '' : `<p class="muted">${t('noDestHint')}</p>${quickGrid()}`}`;
+    return `${S.ptEdit ? '' : savedBar()}<div class="sh-head"><h2>${t('noDest')}</h2></div>${pts}${S.ptEdit ? '' : `<p class="muted">${t('noDestHint')}</p>${quickGrid()}`}`;
   }
   if (S.ptEdit) return pts;
   if (S.routeStatus === 'loading') return `${pts}<div class="empty-state"><span class="spinner"></span>${t('routing')}</div>`;
@@ -758,6 +828,8 @@ async function loadWeather(force = false) {
     S.wx = wx; S.wxPlace = name; S.wxStatus = 'ok';
   } catch { if (!S.wx) S.wxStatus = 'error'; }
   renderWxFab();
+  renderAqFab();
+  aqEarlyWarning();
   if (S.tab === 'weather') render();
 }
 
@@ -768,6 +840,58 @@ function renderWxFab() {
   b.hidden = false;
   b.innerHTML = `${icon(w.icon)}<b>${Math.round(S.wx.now.temp)}°</b>`;
   b.setAttribute('aria-label', `${Math.round(S.wx.now.temp)}° ${getLang() === 'bm' ? w.bm : w.en}. ${t('tabWeather')}`);
+}
+
+// Air pollution index chip on the map: number in the level colour, "!" when the next 24 h look unhealthy.
+const AQ_ALERT = 100; // above this (US AQI) the air is unhealthy for at least sensitive groups
+function aqState(w = S.wx) {
+  if (!w || w.aqi == null) return null;
+  const peak = w.air?.peak;
+  return { now: w.aqi, bad: w.aqi > AQ_ALERT, soon: w.aqi <= AQ_ALERT && peak && peak.aqi > AQ_ALERT ? peak : null };
+}
+
+function renderAqFab() {
+  const b = $('#aq-btn'), st = aqState();
+  if (!st) { b.hidden = true; return; }
+  const aq = aqiLabel(st.now), lang = getLang();
+  b.hidden = false;
+  b.style.setProperty('--lvl', aq.color);
+  b.classList.toggle('alarm', st.bad);
+  b.innerHTML = `${icon('mask')}<b>${Math.round(st.now)}</b>${st.soon ? '<i class="aq-soon" aria-hidden="true">!</i>' : ''}`;
+  b.setAttribute('aria-label', `${t('aqFab')} ${Math.round(st.now)}, ${lang === 'bm' ? aq.bm : aq.en}${st.soon ? `. ${t('aqSoon')}` : ''}`);
+  b.title = `${t('aqFab')}: ${lang === 'bm' ? aq.bm : aq.en}`;
+}
+
+// Early signal: one toast per day and level when the air is (or is about to be) unhealthy.
+function aqEarlyWarning() {
+  const st = aqState();
+  if (!st || (!st.bad && !st.soon)) return;
+  const lang = getLang();
+  const n = Math.round(st.bad ? st.now : st.soon.aqi);
+  const key = `navmap.aqWarned`, stamp = `${new Date().toDateString()}|${aqiLabel(n).level}|${st.bad ? 'now' : 'soon'}`;
+  try { if (localStorage.getItem(key) === stamp) return; localStorage.setItem(key, stamp); } catch { /* private mode: warn anyway */ }
+  const time = st.soon ? new Date(`${st.soon.time}:00+08:00`).toLocaleTimeString(lang === 'bm' ? 'ms-MY' : 'en-MY', { weekday: 'short', hour: 'numeric' }) : '';
+  toast((st.bad ? t('aqToastNow') : t('aqToastSoon')).replace('{n}', n).replace('{time}', time));
+}
+
+function aqAdvice(w) {
+  const st = aqState(w);
+  if (!st || (!st.bad && !st.soon)) return '';
+  const items = ['aqAdvMask', 'aqAdvLimit', 'aqAdvSensitive', 'aqAdvMeds', 'aqAdvPharm'].map((k) => `<li>${esc(t(k))}</li>`).join('');
+  return `<div class="aq-adv ${st.bad ? '' : 'soon'}">
+      <b>${icon('mask')}${t(st.bad ? 'aqAdvH' : 'aqAdvSoonH')}</b>
+      <ul>${items}</ul>
+      <button class="btn-ghost aq-pharm" data-action="aq-pharmacy">${icon('pharmacy')}${t('aqPharmBtn')}</button>
+      <div class="aq-emerg">
+        <p>${icon('phone')}<span>${esc(t('aqAdvEmerg'))}</span></p>
+        <div class="aq-calls">
+          <a class="btn-danger" href="tel:999">${icon('phone')}${t('aqCall')} 999</a>
+          <a class="btn-ghost" href="tel:112">${icon('phone')}${t('aqCall')} 112</a>
+        </div>
+        <small>${t('aqCallNote')}</small>
+      </div>
+      <small>${t('aqAdvNote')}</small>
+    </div>`;
 }
 
 function viewWeather() {
@@ -846,6 +970,7 @@ function pollutionCard(w) {
       </div>
       ${peak ? `<p class="poll-peak">${t('pollPeak')}: <b style="color:${peak.color}">${Math.round(a.peak.aqi)} · ${esc(lang === 'bm' ? peak.bm : peak.en)}</b> <small>(${esc(peakTime)})</small></p>` : ''}
     </div>
+    ${aqAdvice(w)}
     <h4 class="poll-h">${t('pollLevels')}</h4>
     <ul class="poll-levels">${levels}</ul>
     <h4 class="poll-h">${t('pollParts')}</h4>
@@ -913,16 +1038,41 @@ function viewAlerts() {
   const head = `<div class="sh-head"><h2>${t('alertsTitle')}</h2><small style="color:var(--text-subtle);font-size:12px">${S.alertsAt ? `${t('updated')} ${fmtAgo(S.alertsAt, lang)}` : ''}</small></div>`;
   if (S.alertMode === 'loading') return `${head}<div class="empty-state"><span class="spinner"></span></div>`;
   const sample = S.alertMode === 'sample' ? `<div class="note">${icon('accident')}<span>${t('sample')}</span></div>` : '';
-  const rows = list.length ? `<ul class="list">${list.slice(0, 150).map((a) => {
-    const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
-    const ic = a.kind === 'report' ? (a.icon || 'report') : a.kind;
-    return `<li><button class="row wrap" data-alert="${esc(a.id)}">
-      <span class="ic ${a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info'}">${icon(ic)}</span>
-      <span class="mid"><b style="font-size:15px">${esc(L(a, 'title'))}</b><small>${esc(a.place ? `${a.place} · ` : '')}${esc(L(a, 'desc'))}</small><small>${esc(a.source)} · ${esc(fmtAgo(a.time, lang))}</small></span>
-      ${d != null ? `<span class="end"><b>${fmtDist(d)}</b></span>` : ''}
-    </button></li>`;
-  }).join('')}</ul>` : `<div class="empty-state">${icon('weather')}${t('noAlerts')}</div>`;
+  const rows = list.length ? `<ul class="alist">${list.slice(0, 150).map((a) => alertCard(a, ref, lang)).join('')}</ul>` : `<div class="empty-state">${icon('weather')}${t('noAlerts')}</div>`;
   return `${head}${sample}${filters}${rows}<p class="source">${t('sourceNote')}</p>`;
+}
+
+// One alert as a card: severity + time, short title, one-line summary, state chips, valid-until,
+// and the full official text folded behind "Show details".
+function alertCard(a, ref, lang) {
+  const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
+  const ic = a.kind === 'report' ? (a.icon || 'report') : a.kind;
+  const sev = a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info';
+  const sevLabel = t(a.severity === 'danger' ? 'sevDanger' : a.severity === 'warning' ? 'sevWarning' : 'sevInfo');
+  const desc = L(a, 'desc') || '';
+  const long = a.kind === 'weather' || desc.length > 140;
+  const summary = long ? [alertSummary(desc), a.kind === 'weather' ? seaNumbers(desc, lang) : ''].filter(Boolean).join(' ') : [a.place, desc].filter(Boolean).join(' · ');
+  const states = a.kind === 'weather' ? alertStates(desc) : [];
+  const marine = a.kind === 'weather' && isMarine(desc);
+  const MAXC = 4;
+  const chips = [
+    ...(marine ? [`<span class="tag sea">${icon('wind')}${t('seaAreas')}</span>`] : []),
+    ...states.slice(0, MAXC).map((s) => `<span class="tag">${esc(s)}</span>`),
+    ...(states.length > MAXC ? [`<span class="tag more">+${states.length - MAXC}</span>`] : []),
+  ].join('');
+  const until = a.validTo ? fmtUntil(a.validTo, lang) : '';
+  const instr = L(a, 'instruction');
+  const top = `<span class="acard-top"><span class="sev ${sev}">${sevLabel}</span><span class="ago">${esc(fmtAgo(a.time, lang))}</span></span>`;
+  const main = `<span class="ic ${sev}">${icon(ic)}</span>
+      <span class="mid">${top}<b>${esc(tidyTitle(L(a, 'title')))}</b>${summary ? `<span class="sum">${esc(summary)}</span>` : ''}</span>
+      ${d != null ? `<span class="end"><b>${fmtDist(d)}</b></span>` : ''}`;
+  const headEl = a.lat != null
+    ? `<button class="acard-head" data-alert="${esc(a.id)}" aria-label="${t('showOnMap')}: ${esc(L(a, 'title'))}">${main}</button>`
+    : `<div class="acard-head">${main}</div>`;
+  const meta = (chips || until) ? `<div class="acard-meta">${chips ? `<div class="tags">${chips}</div>` : ''}${until ? `<span class="until">${icon('clock')}${t('until')} ${esc(until)}</span>` : ''}</div>` : '';
+  const details = long ? `<details class="acard-more"><summary><span class="open">${t('showDetails')}</span><span class="shut">${t('hideDetails')}</span></summary>
+      <div class="atext">${alertTextHtml(desc, esc)}${instr ? `<p class="instr">${esc(instr)}</p>` : ''}</div></details>` : '';
+  return `<li class="acard ${sev}">${headEl}${meta}${details}<small class="asrc">${esc(a.source)}</small></li>`;
 }
 
 // ---------------------------------------------------------------- live news (environment & nature)
@@ -1103,6 +1253,28 @@ function pickResult(r) {
   render();
 }
 
+async function savedAction(act, k) {
+  if (act === 'saved-go' && S.saved[k]) { const p = savedPlace(k); routeTo({ id: p.id, name: S.saved[k].name ? `${savedLabel(k)} · ${S.saved[k].name}` : savedLabel(k), lat: p.lat, lon: p.lon }); return; }
+  if (act === 'saved-set') { S.saveMode = S.saveMode === k ? null : k; render(); return; }
+  if (act === 'saved-cancel') { S.saveMode = null; render(); return; }
+  if (act === 'saved-remove') { S.saved = setSaved(k, null); S.saveMode = null; drawSaved(); render(); toast(tk('removedToast', k)); return; }
+  if (act === 'saved-search') { toast(tk('saveSearchHint', k)); q.focus(); return; }
+  if (act === 'saved-loc') {
+    const me = S.me || await locate({ fly: false });
+    if (!me) { toast(t('saveNoLoc')); return; }
+    const area = await placeName(me[1], me[0]).catch(() => '');
+    S.saved = setSaved(k, { name: area ? `${t('myLocation')}, ${area}` : `${t('myLocation')} (${me[1].toFixed(4)}, ${me[0].toFixed(4)})`, lat: me[1], lon: me[0] });
+    S.saveMode = null; drawSaved(); render(); toast(tk('savedToast', k));
+    return;
+  }
+  if (act === 'save-place' && S.selected) {
+    const p = S.selected;
+    S.saved = setSaved(k, { name: p.name, lat: p.lat, lon: p.lon });
+    S.saveMode = null; drawSaved(); render(); toast(tk('savedToast', k));
+  }
+}
+mapReady.then(drawSaved);
+
 // ---------------------------------------------------------------- events
 document.addEventListener('click', (e) => {
   const up = e.target.closest('[data-unpin]');
@@ -1124,6 +1296,7 @@ document.addEventListener('click', (e) => {
   const findPlace = (id) => S.places.find((p) => p.id === id) || (S.selected?.id === id ? S.selected : null);
   if (act === 'go') { const p = findPlace(el.dataset.place); if (p) routeTo({ id: p.id, name: p.name, lat: p.lat, lon: p.lon }); return; }
   if (el.dataset.place && !act) { const p = findPlace(el.dataset.place); if (p) selectPlace(p); return; }
+  if (act && act.startsWith('save')) { savedAction(act, el.dataset.kind); return; }
   if (act === 'toggle-all') { S.showAll = !S.showAll; setSheet(S.showAll ? 'full' : 'half'); render(); }
   if (act === 'retry') loadPlaces(S.cat);
   if (act === 'back') { S.selected = null; drawPlaces(); render(); }
@@ -1137,6 +1310,7 @@ document.addEventListener('click', (e) => {
     else locate({ fly: false, quiet: false }).then(() => { if (S.me) setPoint('end', { id: 'me', name: t('myLocation'), lon: S.me[0], lat: S.me[1] }); });
   }
   if (act === 'pt-map') pickOnMap(S.ptEdit);
+  if (act === 'pt-saved' && S.saved[el.dataset.kind]) { const k = el.dataset.kind, v = S.saved[k]; setPoint(S.ptEdit, { id: `saved-${k}`, name: v.name ? `${savedLabel(k)} · ${v.name}` : savedLabel(k), lat: v.lat, lon: v.lon }); }
   if (act === 'pt-result') { const r = ptResults[Number(el.dataset.i)]; if (r) setPoint(S.ptEdit, toPoint(r)); }
   if (act === 'pt-swap') swapPoints();
   if (act === 'pt-reset-start') { S.start = null; computeRoute(); }
@@ -1146,6 +1320,7 @@ document.addEventListener('click', (e) => {
   if (act === 'wx-retry') loadWeather(true);
   if (act === 'news-retry') loadNews(true);
   if (act === 'subscribe') openSubscribe();
+  if (act === 'aq-pharmacy') loadPlaces('pharmacy');
   if (act === 'poll-jump') $('#poll')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
@@ -1206,7 +1381,7 @@ $('#hud-voice').addEventListener('click', () => {
 $('#lang-btn').addEventListener('click', () => {
   setLang(getLang() === 'en' ? 'bm' : 'en');
   $('#lang-btn').textContent = getLang() === 'en' ? 'BM' : 'EN';
-  renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab();
+  renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab(); renderAqFab(); renderScore();
   if (S.nav) updateHud();
 });
 // ---------------------------------------------------------------- map layers menu
@@ -1215,13 +1390,20 @@ $('#lang-btn').addEventListener('click', () => {
 const SAT_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const SAT_ATTR = 'Imagery © <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics';
 const labelPaint = new Map(); // original label colours, restored when leaving satellite
-const getBasemap = () => { try { return localStorage.getItem('navmap.basemap') === 'satellite' ? 'satellite' : 'map'; } catch { return 'map'; } };
+const BASEMAPS = ['map', 'satellite', 'play'];
+const getBasemap = () => { try { const v = localStorage.getItem('navmap.basemap'); return BASEMAPS.includes(v) ? v : 'map'; } catch { return 'map'; } };
+const isPlay = () => document.documentElement.dataset.basemap === 'play';
 async function setBasemap(kind) {
   try { localStorage.setItem('navmap.basemap', kind); } catch { /* private mode */ }
   document.querySelectorAll('[data-basemap]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.basemap === kind)));
+  const wasPlay = isPlay();
   document.documentElement.dataset.basemap = kind;
+  renderScore();
   await mapReady;
   const sat = kind === 'satellite';
+  const play = kind === 'play';
+  // Undo Play first so the satellite code below saves the street map's own label colours.
+  if (!play) applyPlay(map, false);
   const layers = map.getStyle().layers;
   if (sat && !map.getLayer('sat')) {
     if (!map.getSource('sat')) map.addSource('sat', { type: 'raster', tiles: [SAT_TILES], tileSize: 256, maxzoom: 19, attribution: SAT_ATTR });
@@ -1249,8 +1431,53 @@ async function setBasemap(kind) {
       }
     } catch { /* layer without text */ }
   }
+  if (play) {
+    applyPlay(map, true);
+    if (!S.nav) map.easeTo({ pitch: PLAY_PITCH, zoom: Math.max(map.getZoom(), 16), duration: 900 });
+    const r = award('explore');
+    if (r.badges.length) celebrate(r);
+  } else if (wasPlay && !S.nav) map.easeTo({ pitch: 0, duration: 600 });
 }
-if (getBasemap() === 'satellite') setBasemap('satellite');
+if (getBasemap() !== 'map') setBasemap(getBasemap());
+
+// ---------------------------------------------------------------- Play view: points and badges
+function renderScore() {
+  const chip = $('#score-chip');
+  if (!chip) return;
+  chip.hidden = !isPlay();
+  const s = getScore();
+  chip.innerHTML = `<span class="sc-lvl">${esc(t('playLevel'))} ${levelOf(s.pts)}</span><span class="sc-pts">⭐ ${s.pts}</span>`;
+  chip.setAttribute('aria-label', `${t('playLevel')} ${levelOf(s.pts)}, ${s.pts} ${t('playPoints')}`);
+}
+function celebrate({ gained, badges }) {
+  renderScore();
+  const bm = getLang() === 'bm';
+  const parts = [];
+  if (gained) parts.push(`+${gained} ${t('playPoints')}`);
+  for (const b of badges) parts.push(`${b.icon} ${t('playBadge')}: ${bm ? b.bm : b.en}`);
+  if (parts.length) toast(parts.join(' · '));
+  if (gained && isPlay()) {
+    const chip = $('#score-chip');
+    chip.classList.remove('bump'); void chip.offsetWidth; chip.classList.add('bump');
+  }
+}
+function renderScoreDialog() {
+  const s = getScore();
+  const bm = getLang() === 'bm';
+  const lvl = levelOf(s.pts);
+  const into = s.pts % LEVEL_PTS;
+  $('#score-body').innerHTML = `
+    <p class="sc-big"><b>${esc(t('playLevel'))} ${lvl}</b> · ⭐ ${s.pts} ${esc(t('playPoints'))}</p>
+    <div class="sc-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${LEVEL_PTS}" aria-valuenow="${into}"><span style="width:${(into / LEVEL_PTS) * 100}%"></span></div>
+    <p class="muted">${esc(t('playNext').replace('{n}', LEVEL_PTS - into))}</p>
+    <ul class="sc-badges">${BADGES.map((b) => {
+      const got = s.badges.includes(b.id);
+      return `<li class="${got ? 'got' : ''}"><span class="sc-ic" aria-hidden="true">${got ? b.icon : '🔒'}</span><span><b>${esc(bm ? b.bm : b.en)}</b><small>${esc(bm ? b.bmHint : b.enHint)}</small></span></li>`;
+    }).join('')}</ul>
+    <p class="muted sc-how">${esc(t('playHow'))}</p>`;
+}
+$('#score-chip').addEventListener('click', () => { renderScoreDialog(); $('#score-dlg').showModal(); });
+$('#score-close').addEventListener('click', () => $('#score-dlg').close());
 
 const layersBtn = $('#alerts-layer-btn');
 const layersPop = $('#layers-pop');
@@ -1305,11 +1532,17 @@ $('#report-grid').addEventListener('click', async (e) => {
     S.reports = [...S.reports.filter((x) => x.id !== r.id), r];
     drawAlerts(); renderBanner(); render();
     toast(pinsMod.shared ? t('pinnedShared') : t('pinnedLocal'));
+    const g = award('pin');
+    if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 2400);
   } catch (err) {
     toast(err.message === 'rate' ? t('pinRate') : t('pinFailed'));
   }
 });
 $('#wx-btn').addEventListener('click', () => { openSheet(); setTab('weather'); });
+$('#aq-btn').addEventListener('click', () => {
+  openSheet(); setTab('weather');
+  setTimeout(() => $('#poll')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 320);
+});
 
 // Email updates sign-up: explicit, unticked consent box (PDPA); stored by /api/subscribe.
 const subDlg = $('#sub-dlg');
@@ -1378,6 +1611,9 @@ function renderSos() {
     </section>`).join('');
   $('#sos-body').innerHTML = `<a class="sos-999" href="tel:999">${icon('phone')}<span><b>999</b><small>${t('sosLead')}</small></span></a>
     <div class="sos-loc"><small>${t('myCoords')}</small>${me ? `<div><b>${me}</b><button class="btn-ghost sm" data-sos-copy="${me}">${icon('copy')}${t('copy')}</button></div>` : `<p class="muted sm">${t('locUnknown')}</p>`}</div>
+    <section class="sos-group"><h3>${icon('pin')}${t('sosNearest')}</h3>
+      <div class="sos-near">${['hospital', 'police', 'fire', 'shelter'].map((c) => `<button class="btn-ghost" data-sos-cat="${c}">${icon(c)}${esc(CATEGORIES[c].short[lang])}</button>`).join('')}</div>
+    </section>
     ${groups}
     <p class="source">${t('sosNote')}</p>
     <p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`;
@@ -1389,6 +1625,8 @@ sosDlg.addEventListener('click', async (e) => {
   const cp = e.target.closest('[data-sos-copy]');
   if (cp) { try { await navigator.clipboard.writeText(cp.dataset.sosCopy); toast(t('copied')); } catch { /* ignore */ } return; }
   if (e.target.closest('[data-sos-workshop]')) { sosDlg.close(); openSheet(); loadPlaces('workshop'); }
+  const near = e.target.closest('[data-sos-cat]');
+  if (near) { sosDlg.close(); openSheet(); loadPlaces(near.dataset.sosCat); }
 });
 $('#radar-fab').addEventListener('click', () => toggleRadar());
 
