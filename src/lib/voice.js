@@ -1,45 +1,60 @@
 // Spoken navigation using the browser's built-in speech (Web Speech API). No cost, works offline.
+import { packById, STD } from './voice-packs.js';
+
 const KEY = 'navmap.voice';
-let enabled = (() => { try { return localStorage.getItem(KEY) !== 'off'; } catch { return true; } })();
+const PACK_KEY = 'navmap.voicePack';
+const get = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const put = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
+
+let enabled = get(KEY) !== 'off';
+let packId = get(PACK_KEY) || 'auto';
 
 export const voiceSupported = () => typeof window !== 'undefined' && 'speechSynthesis' in window;
 export const voiceOn = () => enabled && voiceSupported();
 export function setVoice(on) {
   enabled = on;
-  try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch { /* ignore */ }
+  put(KEY, on ? 'on' : 'off');
   if (!on && voiceSupported()) speechSynthesis.cancel();
 }
 
-function pickVoice(lang) {
+export const getVoicePack = () => packId;
+export function setVoicePack(id) { packId = packById(id).id; put(PACK_KEY, packId); }
+
+const norm = (s) => String(s || '').replace('_', '-').toLowerCase();
+/** The best installed voice for a pack, or null. */
+export function findVoice(pack) {
+  if (!voiceSupported() || !pack.tts) return null;
   const voices = speechSynthesis.getVoices();
-  const want = lang === 'bm' ? ['ms-MY', 'ms', 'id-ID', 'id'] : ['en-MY', 'en-SG', 'en-GB', 'en-US', 'en'];
-  for (const w of want) {
-    const v = voices.find((x) => x.lang.replace('_', '-').toLowerCase().startsWith(w.toLowerCase()));
+  for (const w of pack.tts) {
+    const v = voices.find((x) => norm(x.lang) === norm(w)) || voices.find((x) => norm(x.lang).startsWith(norm(w)));
     if (v) return v;
   }
   return null;
 }
+/** True once the voice list has loaded (some browsers fill it in a moment later). */
+export const voicesLoaded = () => voiceSupported() && speechSynthesis.getVoices().length > 0;
 
-/** Speak now, interrupting anything older. Call once from a tap first so iOS allows audio. */
-export function speak(text, lang = 'en') {
-  if (!voiceOn() || !text) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  const v = pickVoice(lang);
-  if (v) { u.voice = v; u.lang = v.lang; } else u.lang = lang === 'bm' ? 'ms-MY' : 'en-MY';
-  u.rate = 1;
-  speechSynthesis.speak(u);
+/**
+ * The pack that will actually speak, given the app language. Tamil and Chinese need their own voice;
+ * when it isn't installed we fall back to the app language so the driver never hears garbled speech.
+ */
+export function activePack(appLang) {
+  const std = STD[appLang === 'bm' ? 'bm' : 'en'];
+  const p = packById(packId);
+  if (p.id === 'auto') return std;
+  if (p.needs && voicesLoaded() && !findVoice(p)) return std;
+  return p;
 }
 
-/** Spoken distance, e.g. "500 metres" / "1.5 kilometres" (BM: meter / kilometer). */
-export function spokenDist(m, lang) {
-  const bm = lang === 'bm';
-  if (m >= 950) {
-    const km = Math.round(m / 100) / 10;
-    return `${km % 1 === 0 ? km.toFixed(0) : km} ${bm ? 'kilometer' : km === 1 ? 'kilometre' : 'kilometres'}`;
-  }
-  const r = m >= 300 ? Math.round(m / 100) * 100 : Math.round(m / 50) * 50;
-  return `${Math.max(50, r)} ${bm ? 'meter' : 'metres'}`;
+/** Speak now, interrupting anything older (or after it, with `queue`). Call once from a tap first so iOS allows audio. */
+export function speak(text, pack, { queue = false, force = false } = {}) {
+  if ((!voiceOn() && !force) || !voiceSupported() || !text) return;
+  if (!queue) speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const v = findVoice(pack);
+  if (v) { u.voice = v; u.lang = v.lang; } else u.lang = pack.tts?.[0] || 'en-MY';
+  u.rate = 1;
+  speechSynthesis.speak(u);
 }
 
 if (voiceSupported()) speechSynthesis.getVoices(); // warm the voice list

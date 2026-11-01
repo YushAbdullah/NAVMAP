@@ -84,6 +84,7 @@
         <span class="hud-ic" id="hud-ic" aria-hidden="true"></span>
         <div class="hud-main"><b id="hud-dist"></b><span id="hud-text"></span></div>
         <button class="hud-voice" id="hud-voice" aria-pressed="true" aria-label="Mute voice"></button>
+        <button class="hud-voice hud-voice-pick" id="hud-voice-pick" aria-label="Voice style" data-i18n-aria="voiceStyle" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h2M8 8v8M12 5v14M16 8v8M20 11v2"/></svg></button>
       </div>
       <div class="hud-road" id="hud-road"></div>
       <div class="hud-haz" id="hud-haz" role="status" hidden></div>
@@ -166,6 +167,15 @@
         <button class="icon-btn" id="sos-close" aria-label="Close" data-i18n-aria="close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
       <div id="sos-body"></div>
+    </dialog>
+
+    <!-- Voice style picker -->
+    <dialog id="voice-dlg" class="sos-dlg voice-dlg" aria-labelledby="voice-title">
+      <div class="sos-head">
+        <h2 id="voice-title" data-i18n="voiceStyle">Voice style</h2>
+        <button class="icon-btn" id="voice-close" aria-label="Close" data-i18n-aria="close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div id="voice-body" class="voice-body"></div>
     </dialog>
 
     <!-- Play view: badges -->

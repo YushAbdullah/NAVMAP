@@ -14,7 +14,8 @@ import { getVehicle, setVehicle, loadFuelPrices, FUEL_DEFAULT, EV_RATE, tollEsti
 import { measure, along, pointHazards, routeHaze, routeStates, areaWarnings, hazardCount } from './lib/route-hazards.js';
 import { loadAlerts } from './lib/alerts.js';
 import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
-import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voice.js';
+import { speak, setVoice, voiceOn, voiceSupported, activePack, getVoicePack, setVoicePack, findVoice, voicesLoaded } from './lib/voice.js';
+import { VOICE_PACKS } from './lib/voice-packs.js';
 import { PIN_TYPES } from './lib/pin-types.js';
 import { listPins, addPin, removePin, votePin } from './lib/pins.js';
 import { applyPlay, PLAY_PITCH } from './lib/play.js';
@@ -617,18 +618,14 @@ function routeHazardsView(r) {
 function navAreaWarnings() {
   const r = S.routes[S.routeIdx];
   if (!S.nav || !r) return;
-  const lang = getLang();
   if (r.haze && !S.nav.alertSaid.has('haze')) {
     S.nav.alertSaid.add('haze');
-    const moto = S.mode === 'moto';
-    speak(lang === 'bm'
-      ? `Jerebu di laluan ini, indeks pencemaran ${Math.round(r.haze.aqi)}. ${moto ? 'Pakai pelitup muka dan tutup visor.' : 'Tutup tingkap dan guna edaran semula udara.'}`
-      : `Haze on this route, pollution index ${Math.round(r.haze.aqi)}. ${moto ? 'Wear a mask and close your visor.' : 'Close the windows and set the air con to recirculate.'}`, lang);
+    say((p) => p.haze(Math.round(r.haze.aqi), S.mode === 'moto'), { queue: true });
   }
   for (const { a, states } of r.areas || []) {
     if (S.nav.alertSaid.has(a.id)) continue;
     S.nav.alertSaid.add(a.id);
-    speak(lang === 'bm' ? `Amaran cuaca untuk ${states.join(', ')} di laluan ini.` : `Weather warning for ${states.join(', ')} on this route.`, lang);
+    say((p) => p.weather(states.join(', ')), { queue: true });
   }
 }
 
@@ -663,8 +660,7 @@ function startNav() {
   $('#hud').hidden = false;
   syncVoiceBtn();
   // First announcement happens inside the tap, which unlocks speech on iOS.
-  const lang = getLang();
-  speak(`${lang === 'bm' ? 'Mula navigasi.' : 'Starting navigation.'} ${stepText(r.steps[0], lang)}. ${announce(r.steps[1], r.steps[0].distance, lang)}`, lang);
+  say((p) => `${p.start} ${p.step(r.steps[0])}${p.end || '.'} ${announce(p, r.steps[1], r.steps[0].distance)}`);
   markSaid(1, r.steps[0].distance);
   navAreaWarnings();
   if (navigator.geolocation) {
@@ -676,14 +672,21 @@ function startNav() {
   if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 3400);
 }
 
-/** "In 500 metres, turn left onto Jalan Pudu" */
-function announce(step, metres, lang) {
+/** "In 500 metres, turn left onto Jalan Pudu", in the chosen voice pack `p`. */
+function announce(p, step, metres) {
   if (!step) return '';
-  const text = stepText(step, lang);
+  const text = p.step(step);
   if (metres == null || metres < 150) return text;
-  const lower = text.charAt(0).toLowerCase() + text.slice(1);
-  return lang === 'bm' ? `Dalam ${spokenDist(metres, lang)}, ${lower}` : `In ${spokenDist(metres, lang)}, ${lower}`;
+  return p.inDist(p.dist(metres), text);
 }
+
+/** Speak a line built by `fn(phrases, pack)` in the driver's chosen voice (dialect, Tamil, Chinese, EN or BM). */
+function say(fn, opts) {
+  const pk = activePack(getLang());
+  speak(fn(pk.p, pk), pk, opts);
+}
+/** Hazard title in the language the voice pack reads (BM text for BM and dialects, English otherwise). */
+const sayTitle = (a, pk) => (pk.base === 'bm' && a.title_bm) || a.title || '';
 
 function onNavPos(pos) {
   const r = S.routes[S.routeIdx];
@@ -705,7 +708,7 @@ function onNavPos(pos) {
 
   // Voice prompts at 1.2 km, 500 m and ~120 m before each turn, and on arrival.
   if (step.type === 'arrive' && m < 40) {
-    if (!S.nav.said.has('arrived')) { S.nav.said.add('arrived'); speak(t('arrived'), lang); }
+    if (!S.nav.said.has('arrived')) { S.nav.said.add('arrived'); say((p) => p.arrived); }
   } else {
     // closest stage first, so entering a short step speaks once, not twice
     for (const [limit, id] of [...VOICE_STAGES].reverse()) {
@@ -713,7 +716,7 @@ function onNavPos(pos) {
       if (m > limit) continue;
       if (!S.nav.said.has(key)) {
         VOICE_STAGES.forEach(([l, other]) => { if (l >= limit) S.nav.said.add(`${S.nav.step}:${other}`); });
-        speak(id === 'near' ? stepText(step, lang) : announce(step, m, lang), lang);
+        say((p) => (id === 'near' ? p.step(step) : announce(p, step, m)));
       }
       break;
     }
@@ -729,11 +732,11 @@ function onNavPos(pos) {
     if (ahead > 0.6 + reach) {
       if (S.nav.alertSaid.has(`${a.id}:far`)) continue;
       S.nav.alertSaid.add(`${a.id}:far`);
-      speak(lang === 'bm' ? `Amaran: ${title}, ${spokenDist(ahead * 1000, lang)} di hadapan.` : `Warning: ${title} ${spokenDist(ahead * 1000, lang)} ahead.`, lang);
+      say((p, pk) => p.hazFar(sayTitle(a, pk), p.dist(ahead * 1000)));
     } else {
       if (S.nav.alertSaid.has(`${a.id}:near`)) continue;
       S.nav.alertSaid.add(`${a.id}:near`); S.nav.alertSaid.add(`${a.id}:far`);
-      speak(lang === 'bm' ? `${title} di hadapan. Perlahan dan ${S.mode === 'moto' ? 'tunggang' : 'pandu'} dengan berhati-hati.` : `${title} ahead. Slow down and ${S.mode === 'moto' ? 'ride' : 'drive'} carefully.`, lang);
+      say((p, pk) => p.hazNear(sayTitle(a, pk), S.mode === 'moto'));
     }
     toast(`${title}${a.place ? ` · ${a.place}` : ''}`);
   }
@@ -761,7 +764,7 @@ async function reroute() {
   if (!S.nav || !S.dest || !S.me) return;
   S.nav.rerouting = true;
   const lang = getLang();
-  speak(lang === 'bm' ? 'Mengira semula laluan' : 'Rerouting', lang);
+  say((p) => p.reroute);
   $('#hud-text').textContent = lang === 'bm' ? 'Mengira semula laluan…' : 'Rerouting…';
   try {
     const routes = await getRoutes(S.me, [S.dest.lon, S.dest.lat]);
@@ -771,7 +774,7 @@ async function reroute() {
     S.routes = [routes[0]]; S.routeIdx = 0;
     S.nav.step = 1; S.nav.said = new Set(); S.nav.offCount = 0;
     drawRoutes();
-    speak(announce(routes[0].steps[1], routes[0].steps[0].distance, lang), lang);
+    say((p) => announce(p, routes[0].steps[1], routes[0].steps[0].distance));
     markSaid(1, routes[0].steps[0].distance);
   } catch { /* keep the old route, try again on the next bad fixes */ }
   if (S.nav) { S.nav.rerouting = false; S.nav.offCount = 0; updateHud(); }
@@ -797,12 +800,47 @@ function updateHud() {
   }
 }
 
+// ---------------------------------------------------------------- voice picker (dialects, Tamil, Chinese)
+const packName = (x) => x.name[getLang()] || x.name.en;
+function voiceChip() {
+  if (!voiceSupported()) return '';
+  const x = VOICE_PACKS.find((v) => v.id === getVoicePack()) || VOICE_PACKS[0];
+  return `<button class="voice-chip" data-action="voice-pick">${icon('sound')}<span>${t('voiceStyle')}: <b>${esc(packName(x))}</b></span></button>`;
+}
+function renderVoiceDialog() {
+  const cur = getVoicePack(), loaded = voicesLoaded();
+  const groups = [['std', 'voiceStd'], ['dialect', 'voiceDialects'], ['lang', 'voiceLangs']];
+  $('#voice-body').innerHTML = groups.map(([g, label]) => `<h3>${t(label)}</h3>
+    <div class="voice-list" role="radiogroup" aria-label="${esc(t(label))}">${VOICE_PACKS.filter((x) => x.group === g).map((x) => {
+      const missing = x.needs && loaded && !findVoice(x);
+      return `<button class="voice-opt" role="radio" aria-checked="${x.id === cur}" data-pack="${x.id}">
+        <span class="mid"><b>${esc(packName(x))}</b><small>${esc(missing ? t('voiceMissing') : x.hint)}</small></span>
+        <span class="voice-play" aria-hidden="true">${icon('sound')}</span></button>`;
+    }).join('')}</div>`).join('')
+    + `<p class="muted sm">${t('voiceNote')}</p>`;
+}
+const voiceDlg = $('#voice-dlg');
+function openVoiceDialog() { renderVoiceDialog(); voiceDlg.showModal(); }
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-action="voice-pick"]')) { e.preventDefault(); openVoiceDialog(); return; }
+  const opt = e.target.closest('#voice-dlg [data-pack]');
+  if (!opt) return;
+  setVoicePack(opt.dataset.pack);
+  renderVoiceDialog();
+  say((p) => p.sample, { force: true }); // preview, even while muted
+  if (!S.nav) render(); else syncVoiceBtn();
+});
+$('#voice-close').addEventListener('click', () => voiceDlg.close());
+$('#hud-voice-pick').addEventListener('click', openVoiceDialog);
+if (voiceSupported()) speechSynthesis.addEventListener?.('voiceschanged', () => { if (voiceDlg.open) renderVoiceDialog(); });
+
 function syncVoiceBtn() {
   const b = $('#hud-voice');
   b.hidden = !voiceSupported();
   b.setAttribute('aria-pressed', String(voiceOn()));
   b.setAttribute('aria-label', voiceOn() ? t('voiceOff') : t('voiceOn'));
   b.innerHTML = icon(voiceOn() ? 'sound' : 'mute');
+  $('#hud-voice-pick').hidden = !voiceSupported();
 }
 
 function stopNav() {
@@ -1039,7 +1077,7 @@ function viewDrive() {
   // Live turn-by-turn follows GPS, so it needs the route to begin where the user is.
   const go = S.start
     ? `<p class="muted pt-note">${t('previewOnly')}</p><button class="btn-ghost" data-action="pt-reset-start">${icon('nav')}${t('navFromMe')}</button>`
-    : `<button class="btn" data-action="start-nav">${icon('nav')}${t('start')}</button>`;
+    : `<button class="btn" data-action="start-nav">${icon('nav')}${t('start')}</button>${voiceChip()}`;
   return `${pts}
     <div class="summary"><b>${fmtDur(r.duration, lang)}</b><span>${fmtDist(r.distance / 1000)}${r.via ? ` · ${t('via')} ${esc(r.via)}` : ''}</span></div>
     ${alts}${warn}
@@ -1778,7 +1816,7 @@ $('#hud-stop').addEventListener('click', stopNav);
 $('#hud-voice').addEventListener('click', () => {
   setVoice(!voiceOn());
   syncVoiceBtn();
-  if (voiceOn() && S.nav) speak(stepText(S.routes[S.routeIdx].steps[S.nav.step], getLang()), getLang());
+  if (voiceOn() && S.nav) say((p) => p.step(S.routes[S.routeIdx].steps[S.nav.step]));
 });
 $('#lang-btn').addEventListener('click', () => {
   setLang(getLang() === 'en' ? 'bm' : 'en');
