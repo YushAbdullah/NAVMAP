@@ -22,7 +22,7 @@
   <div id="app">
     <div id="map" role="region" aria-label="Map"></div>
 
-    <!-- Top: search, chips, alert banner -->
+    <!-- Top: search, chips, then one banner (an alert near you, otherwise a news headline) -->
     <div class="top">
       <form class="search" id="search-form" role="search" autocomplete="off">
         <span class="brand" aria-hidden="true"><i></i><i></i></span>
@@ -56,18 +56,19 @@
     <!-- Emergency calls button (always on the map) -->
     <button class="sos-fab" id="sos-btn" aria-label="Emergency calls" data-i18n-aria="sosTitle">SOS</button>
 
-    <!-- Map controls -->
-    <div class="fabs">
+    <!-- Current conditions: weather and air pollution in one card -->
+    <div class="conds" id="conds" role="group" aria-label="Weather and air" data-i18n-aria="condsTitle" hidden>
       <button class="fab wx-fab" id="wx-btn" hidden></button>
       <button class="fab wx-fab aq-fab" id="aq-btn" hidden></button>
-      <button class="fab" id="radar-fab" aria-pressed="false" aria-label="Rain radar" data-i18n-aria="radarOn">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12 19 5"/><path d="M19.4 9A8 8 0 1 1 15 4.6"/><path d="M15.5 10.5A4 4 0 1 1 13.5 8.5"/></svg>
+    </div>
+
+    <!-- Map tools (rain radar lives in the Map layers menu) -->
+    <div class="fabs">
+      <button class="fab" id="alerts-layer-btn" aria-label="Map layers" data-i18n-aria="layersTitle" aria-haspopup="true" aria-expanded="false" aria-controls="layers-pop">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>
       </button>
       <button class="fab" id="report-btn" aria-label="Pin weather or hazard" data-i18n-aria="report">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V4h12l-1.5 4L16 12H4"/></svg>
-      </button>
-      <button class="fab" id="alerts-layer-btn" aria-label="Map layers" data-i18n-aria="layersTitle" aria-haspopup="true" aria-expanded="false" aria-controls="layers-pop">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>
       </button>
       <button class="fab" id="locate-btn" aria-label="Centre on my location" data-i18n-aria="locate">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8-8-2z"/></svg>

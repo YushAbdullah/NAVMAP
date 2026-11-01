@@ -55,10 +55,22 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .chev { color: var(--text-muted); }
 
 /* ---------- FABs ---------- */
-.fabs { position: absolute; left: 16px; right: 16px; bottom: calc(var(--sheet-peek, 300px) + 16px); top: var(--top-h, 180px); display: flex; flex-direction: column; flex-wrap: wrap-reverse; justify-content: flex-end; align-content: flex-start; gap: 8px; pointer-events: none; z-index: 4; transition: bottom 280ms var(--ease-out); }
+.fabs { position: absolute; left: auto; right: 16px; bottom: calc(var(--sheet-peek, 300px) + 16px); top: var(--top-h, 180px); display: flex; flex-direction: column; flex-wrap: wrap-reverse; justify-content: flex-end; align-content: flex-start; gap: 8px; pointer-events: none; z-index: 4; transition: bottom 280ms var(--ease-out); }
 .fab { width: 44px; height: 44px; border: 0; border-radius: 12px; background: var(--surface); box-shadow: var(--e1); display: grid; place-items: center; }
 .fab[aria-pressed="false"] { color: var(--text-subtle); opacity: .7; }
 .fab.on { background: var(--ink); color: var(--primary); }
+
+/* Weather + air card: one joined chip under the banner, on the left, away from the map tools */
+.conds { position: absolute; z-index: 4; left: 16px; top: var(--top-h, 180px); display: flex; border-radius: 12px; background: var(--surface); box-shadow: var(--e1); }
+.conds[hidden] { display: none; }
+.conds .fab { box-shadow: none; background: transparent; border-radius: 0; }
+.conds .fab:first-child { border-radius: 12px 0 0 12px; }
+.conds .fab:last-child { border-radius: 0 12px 12px 0; }
+.conds .fab:only-child { border-radius: 12px; }
+.conds .fab:not([hidden]) + .fab:not([hidden]) { border-left: 1px solid var(--border); }
+.conds .aq-fab.alarm { background: var(--lvl); border-left-color: transparent; }
+html[data-basemap="play"] .conds { top: calc(var(--top-h, 180px) + 56px); }
+body.navigating .conds { display: none; }
 
 /* ---------- Sheet ---------- */
 .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--surface); border-radius: 24px 24px 0 0; box-shadow: 0 -12px 32px rgba(16,40,20,0.10); display: flex; flex-direction: column; max-height: 46vh; transition: max-height 280ms var(--ease-out); }
@@ -223,6 +235,7 @@ dialog h2 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
   .grab { display: none; }
   .sheet-body { padding-top: 16px; }
   .fabs { bottom: 24px; right: 24px; left: auto; }
+  .conds, html[data-basemap="play"] .conds { left: auto; right: 24px; top: 24px; }
   .toast { bottom: 24px; left: calc(var(--sheet-w) + 48px + (100vw - var(--sheet-w) - 48px) / 2); }
   .hud { left: auto; right: 24px; top: 24px; width: 380px; }
   body.navigating .top { display: flex; }

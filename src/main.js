@@ -838,8 +838,11 @@ function renderBanner() {
   const count = allAlerts().filter((a) => a.severity !== 'info').length;
   const badge = $('#badge');
   badge.hidden = !count; badge.textContent = count > 99 ? '99+' : String(count);
-  if (!n || S.tab === 'alerts') { b.hidden = true; syncLayout(); return; }
-  b.hidden = false;
+  const wasHidden = b.hidden;
+  b.hidden = !n || S.tab === 'alerts';
+  // only one banner at a time: the news headline steps aside while an alert is shown
+  if (b.hidden !== wasHidden) renderNewsBar();
+  if (b.hidden) { syncLayout(); return; }
   b.classList.toggle('warn', n.a.severity !== 'danger');
   $('#banner-title').textContent = `${L(n.a, 'title')}${S.alertMode === 'sample' && n.a.kind !== 'report' ? ' · SAMPLE' : ''}`;
   $('#banner-sub').textContent = [n.a.place || L(n.a, 'desc'), n.d != null ? `${fmtDist(n.d)} ${t('away')}` : ''].filter(Boolean).join(' · ');
@@ -1158,12 +1161,15 @@ async function loadWeather(force = false) {
 
 function renderWxFab() {
   const b = $('#wx-btn');
-  if (!S.wx) { b.hidden = true; return; }
+  if (!S.wx) { b.hidden = true; syncConds(); return; }
   const w = wmo(S.wx.now.code, S.wx.now.isDay);
   b.hidden = false;
   b.innerHTML = `${icon(w.icon)}<b>${Math.round(S.wx.now.temp)}°</b>`;
   b.setAttribute('aria-label', `${Math.round(S.wx.now.temp)}° ${getLang() === 'bm' ? w.bm : w.en}. ${t('tabWeather')}`);
+  syncConds();
 }
+// The weather + air card hides itself when neither reading is available.
+function syncConds() { $('#conds').hidden = $('#wx-btn').hidden && $('#aq-btn').hidden; }
 
 // Air pollution index chip on the map: number in the level colour, "!" when the next 24 h look unhealthy.
 const AQ_ALERT = 100; // above this (US AQI) the air is unhealthy for at least sensitive groups
@@ -1175,7 +1181,7 @@ function aqState(w = S.wx) {
 
 function renderAqFab() {
   const b = $('#aq-btn'), st = aqState();
-  if (!st) { b.hidden = true; return; }
+  if (!st) { b.hidden = true; syncConds(); return; }
   const aq = aqiLabel(st.now), lang = getLang();
   b.hidden = false;
   b.style.setProperty('--lvl', aq.color);
@@ -1183,6 +1189,7 @@ function renderAqFab() {
   b.innerHTML = `${icon('mask')}<b>${Math.round(st.now)}</b>${st.soon ? '<i class="aq-soon" aria-hidden="true">!</i>' : ''}`;
   b.setAttribute('aria-label', `${t('aqFab')} ${Math.round(st.now)}, ${lang === 'bm' ? aq.bm : aq.en}${st.soon ? `. ${t('aqSoon')}` : ''}`);
   b.title = `${t('aqFab')}: ${lang === 'bm' ? aq.bm : aq.en}`;
+  syncConds();
 }
 
 // Early signal: one toast per day and level when the air is (or is about to be) unhealthy.
@@ -1330,7 +1337,6 @@ async function toggleRadar(on = !S.radar) {
       if (map.getZoom() > 9) map.easeTo({ zoom: 8, duration: 600 });
     } catch { S.radar = false; toast(t('radarFailed')); }
   }
-  $('#radar-fab').setAttribute('aria-pressed', String(S.radar));
   if (S.tab === 'weather') render();
 }
 
@@ -1443,7 +1449,7 @@ async function loadStats() {
 afterMap(loadStats, 1000);
 setInterval(() => { if (!document.hidden) loadStats(); }, 10 * 60e3);
 
-// Headline ticker above the alert banner: rotates the most relevant fresh stories, tap to read.
+// Headline ticker in the banner slot when no alert is shown: rotates the most relevant fresh stories, tap to read.
 let newsBarTimer = null, newsBarIdx = 0;
 const newsBarHidden = () => { try { return sessionStorage.getItem('navmap.newsbar') === 'off'; } catch { return false; } };
 function newsBarItems() {
@@ -1454,7 +1460,7 @@ function newsBarItems() {
 function renderNewsBar() {
   const bar = $('#news-bar');
   const items = newsBarItems();
-  const show = items.length && S.tab !== 'news' && !newsBarHidden();
+  const show = items.length && S.tab !== 'news' && !newsBarHidden() && $('#banner').hidden;
   bar.hidden = !show;
   clearInterval(newsBarTimer);
   if (show) {
@@ -1929,7 +1935,6 @@ sosDlg.addEventListener('click', async (e) => {
   const near = e.target.closest('[data-sos-cat]');
   if (near) { sosDlg.close(); openSheet(); loadPlaces(near.dataset.sosCat); }
 });
-$('#radar-fab').addEventListener('click', () => toggleRadar());
 
 // ---------------------------------------------------------------- boot
 applyStatic();
