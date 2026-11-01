@@ -762,7 +762,14 @@ function aqAdvice(w) {
       <b>${icon('mask')}${t(st.bad ? 'aqAdvH' : 'aqAdvSoonH')}</b>
       <ul>${items}</ul>
       <button class="btn-ghost aq-pharm" data-action="aq-pharmacy">${icon('pharmacy')}${t('aqPharmBtn')}</button>
-      <p class="aq-emerg">${icon('phone')}<a href="tel:999">${esc(t('aqAdvEmerg'))}</a></p>
+      <div class="aq-emerg">
+        <p>${icon('phone')}<span>${esc(t('aqAdvEmerg'))}</span></p>
+        <div class="aq-calls">
+          <a class="btn-danger" href="tel:999">${icon('phone')}${t('aqCall')} 999</a>
+          <a class="btn-ghost" href="tel:112">${icon('phone')}${t('aqCall')} 112</a>
+        </div>
+        <small>${t('aqCallNote')}</small>
+      </div>
       <small>${t('aqAdvNote')}</small>
     </div>`;
 }

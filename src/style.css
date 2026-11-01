@@ -215,8 +215,13 @@ dialog h2 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
 .aq-adv svg { width: 20px; height: 20px; flex: none; }
 .aq-adv ul { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 6px; font-size: 13px; line-height: 1.45; color: var(--text); }
 .aq-pharm { width: 100%; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-.aq-emerg { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; font-size: 13px; font-weight: 600; }
-.aq-emerg a { color: var(--danger); }
+.aq-emerg { margin: 12px 0 8px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--danger) 20%, transparent); }
+.aq-emerg p { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 14px; font-weight: 600; color: var(--danger); line-height: 1.4; }
+.aq-calls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 6px; }
+.aq-calls a { display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; text-decoration: none; font-size: 15px; font-weight: 600; }
+.aq-calls .btn-ghost { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.aq-calls svg { width: 18px; height: 18px; }
+.aq-emerg small { display: block; }
 .aq-adv small { font-size: 11px; color: var(--text-subtle); }
 .wx-card { border-radius: 24px; padding: 18px 18px 12px; color: #fff; margin-top: 4px; text-shadow: 0 1px 2px rgba(0,0,0,0.18); }
 .sky-clear { background: linear-gradient(165deg, #1F6FB2 0%, #3C8FD0 60%, #62A9DE 100%); }
