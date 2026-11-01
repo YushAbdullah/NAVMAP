@@ -12,7 +12,7 @@ import { loadAlerts } from './lib/alerts.js';
 import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
 import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voice.js';
 import { PIN_TYPES } from './lib/pin-types.js';
-import { listPins, addPin, removePin } from './lib/pins.js';
+import { listPins, addPin, removePin, votePin } from './lib/pins.js';
 import { applyPlay, PLAY_PITCH } from './lib/play.js';
 import { award, getScore, levelOf, LEVEL_PTS, BADGES } from './lib/score.js';
 import * as pinsMod from './lib/pins.js';
@@ -185,8 +185,9 @@ function drawReports() {
   reportMarkers = S.showAlertLayer ? S.reports.map((r) => {
     const el = document.createElement('button');
     el.className = `report-pin sev-${r.severity}${r.mine ? ' mine' : ''}`;
-    el.setAttribute('aria-label', L(r, 'title'));
-    el.innerHTML = icon(r.icon || 'report');
+    el.setAttribute('aria-label', `${L(r, 'title')} · ${pinTrust(r, getLang())}`);
+    el.innerHTML = `${icon(r.icon || 'report')}${r.confirms ? `<span class="pin-n">${r.confirms > 9 ? '9+' : r.confirms}</span>` : ''}`;
+    if (r.stale != null) el.style.opacity = String(Math.round((1 - 0.55 * r.stale) * 100) / 100); // older pins fade out
     el.addEventListener('click', (e) => { e.stopPropagation(); alertPopup(r); });
     return new maplibregl.Marker({ element: el }).setLngLat([r.lon, r.lat]).addTo(map);
   }) : [];
@@ -213,8 +214,43 @@ function alertPopup(a) {
   popup?.remove();
   popup = new maplibregl.Popup({ offset: 14, maxWidth: '260px' })
     .setLngLat([a.lon, a.lat])
-    .setHTML(`<b>${esc(L(a, 'title'))}</b>${a.place ? `${esc(a.place)}<br>` : ''}${esc(L(a, 'desc'))}<br><small>${esc(a.source)} · ${esc(fmtAgo(a.time, getLang()))}</small>${a.mine ? `<button class="unpin" data-unpin="${esc(a.pinId)}">${icon('close')}${t('unpin')}</button>` : ''}`)
+    .setHTML(`<b>${esc(L(a, 'title'))}</b>${a.place ? `${esc(a.place)}<br>` : ''}${esc(L(a, 'desc'))}<br><small>${esc(a.source)} · ${esc(fmtAgo(a.time, getLang()))}</small>${a.kind === 'report' ? `<small class="pin-trust">${esc(pinTrust(a, getLang()))}</small>${voteBtns(a)}` : ''}${a.mine ? `<button class="unpin" data-unpin="${esc(a.pinId)}">${icon('close')}${t('unpin')}</button>` : ''}`)
     .addTo(map);
+}
+
+// "Confirmed by 3 · last 5 min ago · expires in 40 min" for a community pin.
+function fmtLeft(iso, lang) {
+  const m = Math.max(1, Math.round((new Date(iso).getTime() - Date.now()) / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.round(m / 60);
+  return lang === 'bm' ? `${h} jam` : `${h} h`;
+}
+function pinTrust(r, lang) {
+  const parts = [];
+  if (r.confirms) {
+    parts.push(r.confirms === 1 ? t('pinConfirmedBy1') : t('pinConfirmedBy').replace('{n}', r.confirms));
+    if (r.lastConfirmedAt) parts.push(t('pinLastSeen').replace('{t}', fmtAgo(r.lastConfirmedAt, lang)));
+  } else if (!r.mine) parts.push(t('pinUnconfirmed'));
+  if (r.gone) parts.push(t('pinGoneN').replace('{n}', r.gone));
+  if (r.expiresAt) parts.push(t('pinLeft').replace('{t}', fmtLeft(r.expiresAt, lang)));
+  return parts.join(' · ');
+}
+// "Still there" / "Gone" buttons for pins other people placed (shared database only).
+function voteBtns(r) {
+  if (!r.canVote) return '';
+  const b = (v, ic, label) => `<button type="button" class="vote ${v}" data-vote="${v}" data-pin="${esc(r.pinId)}" aria-pressed="${r.myVote === v}">${icon(ic)}${t(label)}</button>`;
+  return `<div class="votes" role="group" aria-label="${t('pinAsk')}">${b('confirm', 'check', 'pinStill')}${b('gone', 'close', 'pinGone')}</div>`;
+}
+async function onVote(pinId, v) {
+  popup?.remove();
+  try {
+    const out = await votePin(pinId, v);
+    if (out.removed) { S.reports = S.reports.filter((r) => r.pinId !== pinId); toast(t(v === 'gone' ? 'pinHidden' : 'pinVoteFailed')); }
+    else { S.reports = S.reports.map((r) => (r.pinId === pinId ? out.alert : r)); toast(t(v === 'confirm' ? 'pinThanks' : 'pinGoneThanks')); }
+  } catch (err) {
+    toast(t(err.message === 'rate' ? 'pinVoteRate' : 'pinVoteFailed'));
+  }
+  drawAlerts(); renderBanner(); render();
 }
 
 async function drawRoutes() {
@@ -901,9 +937,9 @@ function viewWeather() {
     .sort((a, b) => new Date(b.time) - new Date(a.time));
   const pinRows = nearPins.length ? `<ul class="list">${nearPins.slice(0, 30).map((r) => `<li><div class="row">
       <button class="pinrow" data-alert="${esc(r.id)}"><span class="ic ${r.severity === 'danger' ? 'danger' : r.severity === 'warning' ? 'warn' : 'info'}">${icon(r.icon)}</span>
-      <span class="mid"><b>${esc(L(r, 'title'))}</b><small>${fmtDist(distKm(origin(), [r.lon, r.lat]))} · ${esc(fmtAgo(r.time, lang))} · ${esc(L(r, 'desc'))}</small></span></button>
+      <span class="mid"><b>${esc(L(r, 'title'))}</b><small>${fmtDist(distKm(origin(), [r.lon, r.lat]))} · ${esc(fmtAgo(r.time, lang))} · ${esc(L(r, 'desc'))}</small><small class="pin-trust">${esc(pinTrust(r, lang))}</small></span></button>
       ${r.mine ? `<button class="btn-ghost sm" data-unpin="${esc(r.pinId)}">${t('unpin')}</button>` : ''}
-    </div></li>`).join('')}</ul>` : `<p class="muted">${t('noPins')}</p>`;
+    </div>${voteBtns(r)}</li>`).join('')}</ul>` : `<p class="muted">${t('noPins')}</p>`;
   const community = `<div class="sh-head" style="margin-top:18px"><h2 style="font-size:18px">${t('communityWx')}</h2><span class="live-dot">${pinsMod.shared ? t('liveShared') : t('deviceOnly')}</span></div>
     ${pinRows}
     <div class="btns"><button class="btn" data-action="pin-weather">${icon('pin')}${t('pinWeather')}</button></div>`;
@@ -1069,10 +1105,11 @@ function alertCard(a, ref, lang) {
   const headEl = a.lat != null
     ? `<button class="acard-head" data-alert="${esc(a.id)}" aria-label="${t('showOnMap')}: ${esc(L(a, 'title'))}">${main}</button>`
     : `<div class="acard-head">${main}</div>`;
+  const trust = a.kind === 'report' ? `<div class="acard-meta"><small class="pin-trust">${esc(pinTrust(a, lang))}</small>${voteBtns(a)}</div>` : '';
   const meta = (chips || until) ? `<div class="acard-meta">${chips ? `<div class="tags">${chips}</div>` : ''}${until ? `<span class="until">${icon('clock')}${t('until')} ${esc(until)}</span>` : ''}</div>` : '';
   const details = long ? `<details class="acard-more"><summary><span class="open">${t('showDetails')}</span><span class="shut">${t('hideDetails')}</span></summary>
       <div class="atext">${alertTextHtml(desc, esc)}${instr ? `<p class="instr">${esc(instr)}</p>` : ''}</div></details>` : '';
-  return `<li class="acard ${sev}">${headEl}${meta}${details}<small class="asrc">${esc(a.source)}</small></li>`;
+  return `<li class="acard ${sev}">${headEl}${meta}${trust}${details}<small class="asrc">${esc(a.source)}</small></li>`;
 }
 
 // ---------------------------------------------------------------- live news (environment & nature)
@@ -1279,6 +1316,8 @@ mapReady.then(drawSaved);
 document.addEventListener('click', (e) => {
   const up = e.target.closest('[data-unpin]');
   if (up) { e.stopPropagation(); unpin(up.dataset.unpin); return; }
+  const vb = e.target.closest('[data-vote]');
+  if (vb) { e.stopPropagation(); if (vb.getAttribute('aria-pressed') !== 'true') onVote(vb.dataset.pin, vb.dataset.vote); return; }
   const el = e.target.closest('[data-news-region],[data-news-topic],[data-cat],[data-place],[data-action],[data-route],[data-filter],[data-alert],[data-tab]');
   if (!el) return;
   if (el.dataset.tab) { setTab(el.dataset.tab); return; }
@@ -1501,7 +1540,7 @@ $('#report-grid').addEventListener('click', async (e) => {
     const r = await addPin(b.dataset.report, c[1], c[0]);
     S.reports = [...S.reports.filter((x) => x.id !== r.id), r];
     drawAlerts(); renderBanner(); render();
-    toast(pinsMod.shared ? t('pinnedShared') : t('pinnedLocal'));
+    toast(r.merged ? t('pinMerged') : pinsMod.shared ? t('pinnedShared') : t('pinnedLocal'));
     const g = award('pin');
     if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 2400);
   } catch (err) {
