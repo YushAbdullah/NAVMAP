@@ -630,7 +630,7 @@ function viewExplore() {
 // area being viewed. Uses the official Maps URLs, so no API key, no cost, and no Google data on our map.
 const GMAPS_Q = {
   ev: 'EV charging station', fuel: 'petrol station', food: 'fast food', toilet: 'public toilet',
-  surau: 'surau masjid', hospital: 'hospital klinik', workshop: 'car workshop bengkel kereta',
+  surau: 'surau masjid', hospital: 'hospital klinik', pharmacy: 'farmasi pharmacy', workshop: 'car workshop bengkel kereta',
   police: 'balai polis', fire: 'balai bomba', shelter: 'pusat pemindahan banjir',
 };
 function gmapsSearchUrl(cat) {
@@ -708,6 +708,8 @@ async function loadWeather(force = false) {
     S.wx = wx; S.wxPlace = name; S.wxStatus = 'ok';
   } catch { if (!S.wx) S.wxStatus = 'error'; }
   renderWxFab();
+  renderAqFab();
+  aqEarlyWarning();
   if (S.tab === 'weather') render();
 }
 
@@ -718,6 +720,51 @@ function renderWxFab() {
   b.hidden = false;
   b.innerHTML = `${icon(w.icon)}<b>${Math.round(S.wx.now.temp)}°</b>`;
   b.setAttribute('aria-label', `${Math.round(S.wx.now.temp)}° ${getLang() === 'bm' ? w.bm : w.en}. ${t('tabWeather')}`);
+}
+
+// Air pollution index chip on the map: number in the level colour, "!" when the next 24 h look unhealthy.
+const AQ_ALERT = 100; // above this (US AQI) the air is unhealthy for at least sensitive groups
+function aqState(w = S.wx) {
+  if (!w || w.aqi == null) return null;
+  const peak = w.air?.peak;
+  return { now: w.aqi, bad: w.aqi > AQ_ALERT, soon: w.aqi <= AQ_ALERT && peak && peak.aqi > AQ_ALERT ? peak : null };
+}
+
+function renderAqFab() {
+  const b = $('#aq-btn'), st = aqState();
+  if (!st) { b.hidden = true; return; }
+  const aq = aqiLabel(st.now), lang = getLang();
+  b.hidden = false;
+  b.style.setProperty('--lvl', aq.color);
+  b.classList.toggle('alarm', st.bad);
+  b.innerHTML = `${icon('mask')}<b>${Math.round(st.now)}</b>${st.soon ? '<i class="aq-soon" aria-hidden="true">!</i>' : ''}`;
+  b.setAttribute('aria-label', `${t('aqFab')} ${Math.round(st.now)}, ${lang === 'bm' ? aq.bm : aq.en}${st.soon ? `. ${t('aqSoon')}` : ''}`);
+  b.title = `${t('aqFab')}: ${lang === 'bm' ? aq.bm : aq.en}`;
+}
+
+// Early signal: one toast per day and level when the air is (or is about to be) unhealthy.
+function aqEarlyWarning() {
+  const st = aqState();
+  if (!st || (!st.bad && !st.soon)) return;
+  const lang = getLang();
+  const n = Math.round(st.bad ? st.now : st.soon.aqi);
+  const key = `navmap.aqWarned`, stamp = `${new Date().toDateString()}|${aqiLabel(n).level}|${st.bad ? 'now' : 'soon'}`;
+  try { if (localStorage.getItem(key) === stamp) return; localStorage.setItem(key, stamp); } catch { /* private mode: warn anyway */ }
+  const time = st.soon ? new Date(`${st.soon.time}:00+08:00`).toLocaleTimeString(lang === 'bm' ? 'ms-MY' : 'en-MY', { weekday: 'short', hour: 'numeric' }) : '';
+  toast((st.bad ? t('aqToastNow') : t('aqToastSoon')).replace('{n}', n).replace('{time}', time));
+}
+
+function aqAdvice(w) {
+  const st = aqState(w);
+  if (!st || (!st.bad && !st.soon)) return '';
+  const items = ['aqAdvMask', 'aqAdvLimit', 'aqAdvSensitive', 'aqAdvMeds', 'aqAdvPharm'].map((k) => `<li>${esc(t(k))}</li>`).join('');
+  return `<div class="aq-adv ${st.bad ? '' : 'soon'}">
+      <b>${icon('mask')}${t(st.bad ? 'aqAdvH' : 'aqAdvSoonH')}</b>
+      <ul>${items}</ul>
+      <button class="btn-ghost aq-pharm" data-action="aq-pharmacy">${icon('pharmacy')}${t('aqPharmBtn')}</button>
+      <p class="aq-emerg">${icon('phone')}<a href="tel:999">${esc(t('aqAdvEmerg'))}</a></p>
+      <small>${t('aqAdvNote')}</small>
+    </div>`;
 }
 
 function viewWeather() {
@@ -796,6 +843,7 @@ function pollutionCard(w) {
       </div>
       ${peak ? `<p class="poll-peak">${t('pollPeak')}: <b style="color:${peak.color}">${Math.round(a.peak.aqi)} · ${esc(lang === 'bm' ? peak.bm : peak.en)}</b> <small>(${esc(peakTime)})</small></p>` : ''}
     </div>
+    ${aqAdvice(w)}
     <h4 class="poll-h">${t('pollLevels')}</h4>
     <ul class="poll-levels">${levels}</ul>
     <h4 class="poll-h">${t('pollParts')}</h4>
@@ -1133,6 +1181,7 @@ document.addEventListener('click', (e) => {
   if (act === 'wx-retry') loadWeather(true);
   if (act === 'news-retry') loadNews(true);
   if (act === 'subscribe') openSubscribe();
+  if (act === 'aq-pharmacy') loadPlaces('pharmacy');
   if (act === 'poll-jump') $('#poll')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
@@ -1190,7 +1239,7 @@ $('#hud-voice').addEventListener('click', () => {
 $('#lang-btn').addEventListener('click', () => {
   setLang(getLang() === 'en' ? 'bm' : 'en');
   $('#lang-btn').textContent = getLang() === 'en' ? 'BM' : 'EN';
-  renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab(); renderScore();
+  renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab(); renderAqFab(); renderScore();
   if (S.nav) updateHud();
 });
 // ---------------------------------------------------------------- map layers menu
@@ -1345,6 +1394,10 @@ $('#report-grid').addEventListener('click', async (e) => {
   }
 });
 $('#wx-btn').addEventListener('click', () => { openSheet(); setTab('weather'); });
+$('#aq-btn').addEventListener('click', () => {
+  openSheet(); setTab('weather');
+  setTimeout(() => $('#poll')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 320);
+});
 
 // Email updates sign-up: explicit, unticked consent box (PDPA); stored by /api/subscribe.
 const subDlg = $('#sub-dlg');
