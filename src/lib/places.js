@@ -17,7 +17,7 @@ export const CATEGORIES = {
   toilet:   { en: 'Toilets', bm: 'Tandas', short: { en: 'Toilets', bm: 'Tandas' }, q: 'nwr["amenity"="toilets"]' },
   surau:    { en: 'Surau & masjid', bm: 'Surau & masjid', short: { en: 'Surau', bm: 'Surau' }, q: 'nwr["amenity"="place_of_worship"]["religion"="muslim"]' },
   hospital: { en: 'Hospitals & clinics', bm: 'Hospital & klinik', short: { en: 'Hospitals', bm: 'Hospital' }, q: 'nwr["amenity"~"^(hospital|clinic)$"]' },
-  // Pharmacies and chemists (Watsons, Guardian, Caring, AA Pharmacy and independents).
+  // Pharmacies and chemists: every chain (Watsons, Guardian, Caring, AA, Big, Alpro, Health Lane, Multicare...) and independents.
   pharmacy: { en: 'Pharmacies', bm: 'Farmasi', short: { en: 'Pharmacy', bm: 'Farmasi' }, q: ['nwr["amenity"="pharmacy"]', 'nwr["shop"="chemist"]'] },
   police:   { en: 'Police stations', bm: 'Balai polis', short: { en: 'Police', bm: 'Polis' }, q: 'nwr["amenity"="police"]' },
   fire:     { en: 'Fire stations (Bomba)', bm: 'Balai bomba', short: { en: 'Bomba', bm: 'Bomba' }, q: 'nwr["amenity"="fire_station"]' },

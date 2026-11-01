@@ -630,7 +630,7 @@ function viewExplore() {
 // area being viewed. Uses the official Maps URLs, so no API key, no cost, and no Google data on our map.
 const GMAPS_Q = {
   ev: 'EV charging station', fuel: 'petrol station', food: 'fast food', toilet: 'public toilet',
-  surau: 'surau masjid', hospital: 'hospital klinik', pharmacy: 'farmasi pharmacy Watsons Guardian', workshop: 'car workshop bengkel kereta',
+  surau: 'surau masjid', hospital: 'hospital klinik', pharmacy: 'farmasi pharmacy', workshop: 'car workshop bengkel kereta',
   police: 'balai polis', fire: 'balai bomba', shelter: 'pusat pemindahan banjir',
 };
 function gmapsSearchUrl(cat) {
