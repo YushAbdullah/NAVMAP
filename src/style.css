@@ -120,11 +120,25 @@ button.row:hover { box-shadow: var(--e1); transform: translateY(-1px); }
 .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--surface-tint); border-top-color: var(--accent); animation: spin 800ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.route-pts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.route-pts { position: relative; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .route-pt { display: flex; align-items: center; gap: 10px; background: var(--surface-muted); border-radius: 12px; padding: 10px 12px; font-size: 15px; }
 .route-pt .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
 .route-pt .dot.dest { background: var(--ink); border-radius: 3px; }
 .route-pt > span:not(.dot) { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.route-pts:has(.pt-swap) .route-pt { padding-right: 52px; }
+.pt-btn { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; border: 0; background: none; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.pt-btn small { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-subtle); }
+.pt-btn span { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt-btn.empty span { color: var(--text-subtle); }
+.pt-x { border: 0; background: none; padding: 4px; color: var(--text-subtle); display: grid; place-items: center; cursor: pointer; }
+.pt-x svg, .pt-swap svg { width: 18px; height: 18px; }
+.pt-swap { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.pt-edit #pt-q { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 16px; color: inherit; outline: none; }
+.pt-results { margin-top: 8px; }
+.pt-results .empty { padding: 10px 4px; font-size: 14px; }
+.pt-note { margin: 4px 0 8px; font-size: 13px; }
+.pin.start { background: var(--primary); color: var(--on-primary); }
+body.picking .maplibregl-canvas { cursor: crosshair; }
 .summary { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 8px; }
 .summary b { white-space: nowrap; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .summary span { color: var(--text-muted); font-size: 15px; }

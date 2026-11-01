@@ -6,7 +6,7 @@ import { t, L, getLang, setLang, applyStatic } from './lib/i18n.js';
 import { icon, maneuverIcon } from './lib/icons.js';
 import { distKm, distToLineKm, fmtDist, fmtDur, fmtAgo, circle, KL, MY_BBOX } from './lib/geo.js';
 import { CATEGORIES, fetchNearby, prefetchNearby } from './lib/places.js';
-import { searchPlaces } from './lib/search.js';
+import { searchPlaces, reverseName } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
 import { loadAlerts } from './lib/alerts.js';
 import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
@@ -34,6 +34,9 @@ const S = {
   places: [], placesStatus: 'idle', showAll: false, placesCenter: null,
   selected: null,           // place object shown in detail card
   dest: null,               // { name, lat, lon }
+  start: null,              // custom start { name, lat, lon }; null = my location
+  ptEdit: null,             // 'start' | 'end' while its search box is open in the Drive tab
+  picking: null,            // 'start' | 'end' while waiting for a tap on the map
   routes: [], routeIdx: 0, routeStatus: 'idle', routeOrigin: null,
   alerts: [], alertMode: 'loading', alertsAt: null, alertFilter: 'all',
   reports: [],
@@ -108,6 +111,7 @@ const fc = (features) => ({ type: 'FeatureCollection', features });
 // ---------------------------------------------------------------- markers
 let poiMarkers = [];
 let destMarker = null;
+let startMarker = null;
 let meMarker = null;
 let reportMarkers = [];
 
@@ -157,6 +161,13 @@ function drawDest() {
   if (!S.dest || (S.selected && S.places.some((p) => p.id === S.dest.id))) return;
   const el = pinEl('dest', 'pin', S.dest.name);
   destMarker = new maplibregl.Marker({ element: el }).setLngLat([S.dest.lon, S.dest.lat]).addTo(map);
+}
+
+function drawStart() {
+  startMarker?.remove();
+  startMarker = null;
+  if (!S.start) return;
+  startMarker = new maplibregl.Marker({ element: pinEl('start', 'nav', S.start.name) }).setLngLat([S.start.lon, S.start.lat]).addTo(map);
 }
 
 function drawMe() {
@@ -318,14 +329,24 @@ function selectPlace(p) {
 }
 
 let routeAbort;
-async function routeTo(dest) {
+function routeTo(dest) {
+  S.dest = dest;
+  return computeRoute();
+}
+
+// Route from the start point (my location unless the user picked one) to S.dest.
+async function computeRoute() {
   openSheet();
-  S.dest = dest; S.tab = 'drive';
-  S.routes = []; S.routeIdx = 0; S.routeStatus = 'loading';
-  drawDest(); render();
-  if (!S.me) await locate({ fly: false, quiet: false });
-  const from = origin();
-  S.routeOrigin = S.me ? 'me' : 'centre';
+  S.tab = 'drive';
+  S.routes = []; S.routeIdx = 0;
+  drawDest(); drawStart(); drawRoutes();
+  if (!S.dest) { S.routeStatus = 'idle'; render(); return; }
+  S.routeStatus = 'loading';
+  render();
+  if (!S.start && !S.me) await locate({ fly: false, quiet: false });
+  const from = S.start ? [S.start.lon, S.start.lat] : origin();
+  const dest = S.dest;
+  S.routeOrigin = S.start ? 'custom' : S.me ? 'me' : 'centre';
   routeAbort?.abort();
   routeAbort = new AbortController();
   try {
@@ -347,13 +368,84 @@ async function routeTo(dest) {
   render();
 }
 
+// ---------------------------------------------------------------- start / end points
+function setPoint(which, p) {
+  S.ptEdit = null; S.picking = null;
+  document.body.classList.remove('picking');
+  if (which === 'start') S.start = p; else S.dest = p;
+  computeRoute();
+}
+
+async function swapPoints() {
+  if (!S.dest) return;
+  let from = S.start;
+  if (!from) {
+    if (!S.me) await locate({ fly: false, quiet: false });
+    if (!S.me) return;
+    from = { id: 'me', name: t('myLocation'), lon: S.me[0], lat: S.me[1] };
+  }
+  // "My location" moving into the start slot goes back to following GPS.
+  S.start = S.dest.id === 'me' ? null : S.dest;
+  S.dest = from;
+  S.ptEdit = null;
+  computeRoute();
+}
+
+function pickOnMap(which) {
+  S.ptEdit = null; S.picking = which;
+  document.body.classList.add('picking');
+  setSheet('peek');
+  render();
+  toast(which === 'start' ? t('tapStart') : t('tapEnd'));
+}
+
+async function pickedAt(lngLat) {
+  const which = S.picking;
+  const p = { id: `map-${lngLat.lng.toFixed(5)},${lngLat.lat.toFixed(5)}`, name: t('droppedPin'), lon: lngLat.lng, lat: lngLat.lat };
+  setSheet('half');
+  setPoint(which, p);
+  const name = await reverseName(p.lat, p.lon);
+  if (name && (S.start === p || S.dest === p)) { p.name = name; drawStart(); drawDest(); if (S.tab === 'drive') render(); }
+}
+
+let ptResults = [];
+let ptTimer, ptAbort;
+function ptSearch(v) {
+  clearTimeout(ptTimer);
+  const list = $('#pt-results');
+  if (!list) return;
+  if (v.length < 2) { list.querySelectorAll('.pt-hit').forEach((li) => li.remove()); return; }
+  ptTimer = setTimeout(async () => {
+    ptAbort?.abort();
+    ptAbort = new AbortController();
+    try {
+      ptResults = await searchPlaces(v, center(), ptAbort.signal);
+      if (!$('#pt-results')) return;
+      $('#pt-results').querySelectorAll('.pt-hit').forEach((li) => li.remove());
+      $('#pt-results').insertAdjacentHTML('afterbegin', ptResults.length
+        ? ptResults.map((r, i) => `<li class="pt-hit"><button type="button" class="row" data-action="pt-result" data-i="${i}"><span class="ic">${icon('pin')}</span><span class="mid"><b>${esc(r.name)}</b><small>${esc(r.sub || t('inMalaysia'))}</small></span></button></li>`).join('')
+        : `<li class="pt-hit empty muted">${t('none').split('.')[0]}.</li>`);
+    } catch (e) {
+      if (e.name !== 'AbortError' && $('#pt-results')) $('#pt-results').insertAdjacentHTML('beforeend', `<li class="pt-hit empty muted">${t('failed')}</li>`);
+    }
+  }, 280);
+}
+document.addEventListener('input', (e) => { if (e.target.id === 'pt-q') ptSearch(e.target.value.trim()); });
+document.addEventListener('keydown', (e) => {
+  if (e.target.id !== 'pt-q') return;
+  if (e.key === 'Escape') { S.ptEdit = null; render(); }
+  if (e.key === 'Enter') { e.preventDefault(); if (ptResults[0]) setPoint(S.ptEdit, toPoint(ptResults[0])); }
+});
+const toPoint = (r) => ({ id: `search-${r.id}`, name: r.name, lat: r.lat, lon: r.lon });
+
 function alertsOnRoute(coords) {
   const sampled = coords.filter((_, i, a) => i % Math.max(1, Math.floor(a.length / 400)) === 0 || i === a.length - 1);
   return allAlerts().filter((a) => a.lat != null && a.kind !== 'quake' && distToLineKm([a.lon, a.lat], sampled) <= (a.radiusKm || 1));
 }
 
 function clearRoute() {
-  S.routes = []; S.dest = null; S.routeStatus = 'idle';
+  routeAbort?.abort();
+  S.routes = []; S.dest = null; S.routeStatus = 'idle'; S.ptEdit = null;
   drawRoutes(); drawDest(); render();
 }
 
@@ -569,6 +661,7 @@ function render() {
   body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : S.tab === 'news' ? viewNews() : (S.selected ? viewPlace() : viewExplore());
   body.insertAdjacentHTML('beforeend', `${statsLine()}<p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`);
   syncLayout();
+  if (S.tab === 'drive' && S.ptEdit) $('#pt-q')?.focus({ preventScroll: true });
 }
 
 function placeRow(p) {
@@ -670,15 +763,38 @@ function viewPlace() {
   </div>`;
 }
 
+function ptRow(which) {
+  const isStart = which === 'start';
+  const p = isStart ? S.start : S.dest;
+  if (S.ptEdit === which) {
+    return `<div class="pt-edit">
+      <div class="route-pt"><span class="dot${isStart ? '' : ' dest'}"></span>
+        <label for="pt-q" class="sr-only">${t(isStart ? 'from' : 'to')}</label>
+        <input id="pt-q" type="text" placeholder="${esc(t(isStart ? 'searchStart' : 'searchEnd'))}" enterkeyhint="search" autocomplete="off">
+        <button class="pt-x" data-action="pt-cancel" aria-label="${t('close')}">${icon('close')}</button></div>
+      <ul class="list pt-results" id="pt-results">
+        <li><button type="button" class="row" data-action="pt-me"><span class="ic">${icon('nav')}</span><span class="mid"><b>${t('myLocation')}</b></span></button></li>
+        <li><button type="button" class="row" data-action="pt-map"><span class="ic">${icon('pin')}</span><span class="mid"><b>${t('pickOnMap')}</b></span></button></li>
+        ${SAVED_KINDS.filter((k) => S.saved[k]).map((k) => `<li><button type="button" class="row" data-action="pt-saved" data-kind="${k}"><span class="ic">${icon(k)}</span><span class="mid"><b>${esc(savedLabel(k))}</b><small>${esc(S.saved[k].name || '')}</small></span></button></li>`).join('')}
+      </ul></div>`;
+  }
+  const name = isStart
+    ? (p ? p.name : S.routeOrigin === 'centre' && S.dest ? t('mapCentre') : t('myLocation'))
+    : (p ? p.name : t('chooseDest'));
+  return `<div class="route-pt"><span class="dot${isStart ? '' : ' dest'}"></span>
+    <button class="pt-btn${p || isStart ? '' : ' empty'}" data-action="edit-pt" data-pt="${which}"><small>${t(isStart ? 'from' : 'to')}</small><span>${esc(name)}</span></button>
+    ${!isStart && p ? `<button class="pt-x" data-action="clear-route" aria-label="${t('clearDest')}">${icon('close')}</button>` : ''}
+    ${isStart && S.start ? `<button class="pt-x" data-action="pt-reset-start" aria-label="${t('useMyLocation')}">${icon('close')}</button>` : ''}
+  </div>`;
+}
+
 function viewDrive() {
   const lang = getLang();
+  const pts = `<div class="route-pts">${ptRow('start')}${ptRow('end')}${S.dest && !S.ptEdit ? `<button class="pt-swap" data-action="pt-swap" aria-label="${t('swap')}" title="${t('swap')}">${icon('swap')}</button>` : ''}</div>`;
   if (!S.dest) {
-    return `${savedBar()}<div class="sh-head"><h2>${t('noDest')}</h2></div><p class="muted">${t('noDestHint')}</p>${quickGrid()}`;
+    return `${S.ptEdit ? '' : savedBar()}<div class="sh-head"><h2>${t('noDest')}</h2></div>${pts}${S.ptEdit ? '' : `<p class="muted">${t('noDestHint')}</p>${quickGrid()}`}`;
   }
-  const pts = `<div class="route-pts">
-    <div class="route-pt"><span class="dot"></span><span>${S.routeOrigin === 'centre' ? t('mapCentre') : t('myLocation')}</span></div>
-    <div class="route-pt"><span class="dot dest"></span><span>${esc(S.dest.name)}</span><button class="link" style="border:0;background:none;padding:0" data-action="clear-route" aria-label="${t('close')}">${icon('close')}</button></div>
-  </div>`;
+  if (S.ptEdit) return pts;
   if (S.routeStatus === 'loading') return `${pts}<div class="empty-state"><span class="spinner"></span>${t('routing')}</div>`;
   if (S.routeStatus === 'error') return `${pts}<div class="empty-state">${icon('nav')}${t('routeFailed')}<button class="btn-ghost" data-action="reroute">${t('retry')}</button></div>`;
   const r = S.routes[S.routeIdx];
@@ -689,10 +805,14 @@ function viewDrive() {
     ? `<div class="note">${icon('accident')}<div><b>${t('routeWarn')}</b><br>${r.hits.slice(0, 3).map((a) => esc(`${L(a, 'title')}${a.place ? ` · ${a.place}` : ''}`)).join('<br>')}</div></div>`
     : `<p class="muted" style="margin-bottom:10px;color:var(--success)">${t('routeOk')}</p>`;
   const steps = r.steps.map((s) => `<li class="row"><span class="ic info">${maneuverIcon(s)}</span><span class="mid"><b style="font-size:15px;font-weight:500;white-space:normal">${esc(stepText(s, lang))}</b></span><span class="end"><small style="color:var(--text-subtle)">${s.distance ? fmtDist(s.distance / 1000) : ''}</small></span></li>`).join('');
+  // Live turn-by-turn follows GPS, so it needs the route to begin where the user is.
+  const go = S.start
+    ? `<p class="muted pt-note">${t('previewOnly')}</p><button class="btn-ghost" data-action="pt-reset-start">${icon('nav')}${t('navFromMe')}</button>`
+    : `<button class="btn" data-action="start-nav">${icon('nav')}${t('start')}</button>`;
   return `${pts}
     <div class="summary"><b>${fmtDur(r.duration, lang)}</b><span>${fmtDist(r.distance / 1000)}${r.via ? ` · ${t('via')} ${esc(r.via)}` : ''}</span></div>
     ${alts}${warn}
-    <button class="btn" data-action="start-nav">${icon('nav')}${t('start')}</button>
+    ${go}
     <div class="sh-head" style="margin-top:16px"><h2 style="font-size:16px">${t('steps')}</h2></div>
     <ol class="list steps">${steps}</ol>`;
 }
@@ -1181,7 +1301,19 @@ document.addEventListener('click', (e) => {
   if (act === 'retry') loadPlaces(S.cat);
   if (act === 'back') { S.selected = null; drawPlaces(); render(); }
   if (act === 'clear-route') clearRoute();
-  if (act === 'reroute' && S.dest) routeTo(S.dest);
+  if (act === 'reroute' && S.dest) computeRoute();
+  if (act === 'edit-pt') { S.ptEdit = el.dataset.pt; ptResults = []; render(); }
+  if (act === 'pt-cancel') { S.ptEdit = null; render(); }
+  if (act === 'pt-me') {
+    if (S.ptEdit === 'start') setPoint('start', null);
+    else if (S.me) setPoint('end', { id: 'me', name: t('myLocation'), lon: S.me[0], lat: S.me[1] });
+    else locate({ fly: false, quiet: false }).then(() => { if (S.me) setPoint('end', { id: 'me', name: t('myLocation'), lon: S.me[0], lat: S.me[1] }); });
+  }
+  if (act === 'pt-map') pickOnMap(S.ptEdit);
+  if (act === 'pt-saved' && S.saved[el.dataset.kind]) { const k = el.dataset.kind, v = S.saved[k]; setPoint(S.ptEdit, { id: `saved-${k}`, name: v.name ? `${savedLabel(k)} · ${v.name}` : savedLabel(k), lat: v.lat, lon: v.lon }); }
+  if (act === 'pt-result') { const r = ptResults[Number(el.dataset.i)]; if (r) setPoint(S.ptEdit, toPoint(r)); }
+  if (act === 'pt-swap') swapPoints();
+  if (act === 'pt-reset-start') { S.start = null; computeRoute(); }
   if (act === 'start-nav') startNav();
   if (act === 'pin-weather') openPinDialog();
   if (act === 'radar') toggleRadar();
@@ -1212,7 +1344,10 @@ function openSheet() { if (sheetState === 'peek') setSheet('half'); }
 const stepSheet = (dir) => setSheet(LEVELS[Math.max(0, Math.min(2, LEVELS.indexOf(sheetState) + dir))]);
 
 map.on('dragstart', () => { if (isMobile() && !S.nav) setSheet('peek'); });
-map.on('click', () => { if (isMobile() && !S.nav) setSheet(sheetState === 'peek' ? 'half' : 'peek'); });
+map.on('click', (e) => {
+  if (S.picking) { pickedAt(e.lngLat); return; }
+  if (isMobile() && !S.nav) setSheet(sheetState === 'peek' ? 'half' : 'peek');
+});
 
 $('#grab').addEventListener('click', () => setSheet(sheetState === 'peek' ? 'half' : sheetState === 'half' ? 'full' : 'half'));
 $('#sheet').addEventListener('click', (e) => {
@@ -1342,6 +1477,9 @@ layersPop.addEventListener('click', (e) => {
 $('#lp-alerts').addEventListener('change', (e) => { S.showAlertLayer = e.target.checked; drawAlerts(); });
 $('#lp-radar').addEventListener('change', (e) => { if (e.target.checked !== !!S.radar) toggleRadar(); });
 document.addEventListener('click', (e) => { if (!layersPop.hidden && !layersPop.contains(e.target)) toggleLayersPop(false); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && S.picking) { S.picking = null; document.body.classList.remove('picking'); setSheet('half'); render(); }
+});
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !layersPop.hidden) { toggleLayersPop(false); layersBtn.focus(); } });
 window.addEventListener('resize', () => { if (!layersPop.hidden) placeLayersPop(); });
 
