@@ -303,13 +303,14 @@ function tollTag(r) {
 
 /** Tolls: allowed or avoided. The choice is remembered and picks the matching route. */
 function tollBar() {
+  // Always offered for car and motorcycle, so the choice is there before you need it.
   const anyToll = S.routes.some((x) => x.tolls?.length);
-  if (!anyToll) return '';
   const free = S.routes.findIndex((x) => !x.tolls?.length);
   return `<div class="toll-bar" role="group" aria-label="${esc(t('tollTitle'))}"><span>${t('tollTitle')}</span>
     <button class="chip" data-action="tolls" data-v="use" aria-pressed="${!S.avoidTolls}">${t('tollUse')}</button>
     <button class="chip" data-action="tolls" data-v="avoid" aria-pressed="${S.avoidTolls}">${t('tollAvoid')}</button></div>
-    ${S.avoidTolls && free < 0 ? `<p class="muted pt-note">${t('tollNoFree')}</p>` : ''}`;
+    ${S.avoidTolls && free < 0 ? `<p class="muted pt-note">${t('tollNoFree')}</p>` : ''}
+    ${!S.avoidTolls && !anyToll ? `<p class="muted pt-note">${t('tollNoneFaster')}</p>` : ''}`;
 }
 function setAvoidTolls(on) {
   S.avoidTolls = on;
@@ -1191,7 +1192,7 @@ function viewDrive() {
   if (r.transit) return `${pts}${viewTransit(r)}`;
   const alts = S.routes.length > 1 ? `<div class="alts" role="group">${S.routes.map((x, i) =>
     `<button class="alt" data-route="${i}" aria-pressed="${i === S.routeIdx}"><b>${fmtDur(x.duration, lang)}</b>${t(x.label)} · ${fmtDist(x.distance / 1000)}${hazardCount(x) ? ` · ⚠ ${hazardCount(x)}` : ''}<span class="alt-toll${x.tolls?.length ? '' : ' free'}">${tollTag(x)}</span></button>`).join('')}</div>` : '';
-  const warn = `${tollBar()}${routeHazardsView(r)}`;
+  const warn = routeHazardsView(r);
   const steps = r.steps.map((s) => `<li class="row"><span class="ic info">${maneuverIcon(s)}</span><span class="mid"><b style="font-size:15px;font-weight:500;white-space:normal">${esc(stepText(s, lang))}</b></span><span class="end"><small style="color:var(--text-subtle)">${s.distance ? fmtDist(s.distance / 1000) : ''}</small></span></li>`).join('');
   // Live turn-by-turn follows GPS, so it needs the route to begin where the user is.
   const go = S.start
@@ -1199,7 +1200,7 @@ function viewDrive() {
     : `<button class="btn" data-action="start-nav">${icon('nav')}${t('start')}</button>${voiceChip()}`;
   return `${pts}
     <div class="summary"><b>${fmtDur(r.duration, lang)}</b><span>${fmtDist(r.distance / 1000)}${r.via ? ` · ${t('via')} ${esc(r.via)}` : ''}</span></div>
-    ${alts}${warn}
+    ${tollBar()}${alts}${warn}
     ${go}
     ${costView(r)}
     ${compareView(r.distance / 1000, r.duration / 60)}
