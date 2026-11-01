@@ -81,7 +81,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 
 .sh-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 4px 0 12px; }
 .sh-head h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
-.sh-head .link { border: 0; background: none; color: var(--success); font-weight: 500; font-size: 14px; padding: 4px 0; }
+.sh-head .link, .save-panel .link { border: 0; background: none; color: var(--success); font-weight: 500; font-size: 14px; padding: 4px 0; }
 .list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-muted); border: 0; width: 100%; text-align: left; transition: transform 100ms, box-shadow 280ms; }
 button.row:hover { box-shadow: var(--e1); transform: translateY(-1px); }
@@ -401,3 +401,28 @@ body.navigating .sos-fab { bottom: 24px; }
 .lp-sat { background: radial-gradient(circle at 30% 35%, #6f8f5a 0 18%, transparent 19%), radial-gradient(circle at 72% 65%, #3f6b48 0 22%, transparent 23%), linear-gradient(135deg, #556b3f 0 45%, #a39a7a 45% 55%, #2f5d6b 55%); }
 .lp-row { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 14px; cursor: pointer; }
 .lp-row input { width: 18px; height: 18px; accent-color: var(--success); }
+
+/* ---------- Saved places (Home, Work) ---------- */
+.saved-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 2px 0 14px; }
+.saved-card { display: flex; align-items: stretch; min-width: 0; border-radius: 14px; background: var(--surface-2, #F2F7F3); border: 1px solid var(--border); }
+.saved-card.empty { border-style: dashed; background: none; }
+.saved-go { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 10px; border: 0; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.saved-go .ic { flex: none; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--ink); color: var(--primary); }
+.saved-card.empty .ic { background: none; color: var(--text-subtle); border: 1px dashed var(--border); }
+.saved-go .ic svg { width: 16px; height: 16px; }
+.saved-go .mid { display: grid; min-width: 0; }
+.saved-go b { font-size: 14px; font-weight: 600; }
+.saved-go small { font-size: 12px; color: var(--text-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.saved-edit { flex: none; width: 36px; border: 0; background: none; color: var(--text-subtle); display: grid; place-items: center; cursor: pointer; }
+.saved-edit svg { width: 16px; height: 16px; }
+.save-panel { display: grid; gap: 8px; padding: 12px; margin: -6px 0 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); }
+.save-panel .btn-ghost { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
+.save-panel .btn-ghost svg { width: 18px; height: 18px; }
+.save-panel-foot { display: flex; justify-content: space-between; }
+.save-panel .link.danger { color: var(--danger, #C42A36); }
+.save-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.save-row .btn-ghost { display: inline-flex; align-items: center; gap: 6px; }
+.save-row svg, .save-row .tag svg { width: 15px; height: 15px; }
+.save-row .tag.ok { display: inline-flex; align-items: center; gap: 6px; color: var(--success); }
+.save-row .pulse { border-color: var(--success); box-shadow: 0 0 0 3px rgba(28,187,108,.18); }
+.pin.saved { background: #fff; color: var(--ink); border-color: var(--ink); border-radius: 12px; }

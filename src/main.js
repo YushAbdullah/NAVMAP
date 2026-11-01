@@ -13,6 +13,7 @@ import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voic
 import { PIN_TYPES } from './lib/pin-types.js';
 import { listPins, addPin, removePin } from './lib/pins.js';
 import * as pinsMod from './lib/pins.js';
+import { getSaved, setSaved, savedKindAt, SAVED_KINDS } from './lib/saved.js';
 import { fetchWeather, wmo, aqiLabel, AQ_LEVELS, placeName, radarFrames } from './lib/weather.js';
 import { HOTLINE_GROUPS } from './lib/hotlines.js';
 
@@ -22,6 +23,7 @@ const ALERT_REFRESH_MS = 5 * 60 * 1000;
 // ---------------------------------------------------------------- state
 const S = {
   stats: null,
+  saved: getSaved(), saveMode: null,
   tab: 'explore',
   cat: null,
   places: [], placesStatus: 'idle', showAll: false, placesCenter: null,
@@ -117,6 +119,18 @@ function drawPlaces() {
   poiMarkers = S.places.slice(0, 80).map((p) => {
     const el = pinEl(S.selected?.id === p.id ? 'sel' : '', p.cat, p.name);
     el.addEventListener('click', (e) => { e.stopPropagation(); selectPlace(p); });
+    return new maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map);
+  });
+}
+
+// Home / Work markers
+let savedMarkers = [];
+function drawSaved() {
+  savedMarkers.forEach((m) => m.remove());
+  savedMarkers = SAVED_KINDS.filter((k) => S.saved[k]).map((k) => {
+    const p = S.saved[k];
+    const el = pinEl('saved', k, `${savedLabel(k)}: ${p.name}`);
+    el.addEventListener('click', (e) => { e.stopPropagation(); selectPlace(savedPlace(k)); });
     return new maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(map);
   });
 }
@@ -547,9 +561,40 @@ function placeRow(p) {
   </button></li>`;
 }
 
+// ---------------------------------------------------------------- saved places (Home, Work)
+const savedLabel = (k) => t(k === 'home' ? 'savedHome' : 'savedWork');
+const tk = (key, k) => t(key).replace('{k}', savedLabel(k));
+const savedPlace = (k) => {
+  const p = S.saved[k];
+  return { id: `saved-${k}`, cat: k, name: p.name || savedLabel(k), lat: p.lat, lon: p.lon, meta: savedLabel(k), distKm: distKm(S.me || center(), [p.lon, p.lat]) };
+};
+function savedBar() {
+  const cards = SAVED_KINDS.map((k) => {
+    const p = S.saved[k];
+    if (!p) return `<div class="saved-card empty"><button class="saved-go" data-action="saved-set" data-kind="${k}"><span class="ic">${icon(k)}</span><span class="mid"><b>${tk(k === 'home' ? 'setHome' : 'setWork', k)}</b></span></button></div>`;
+    const d = S.me ? fmtDist(distKm(S.me, [p.lon, p.lat])) : '';
+    return `<div class="saved-card"><button class="saved-go" data-action="saved-go" data-kind="${k}" aria-label="${t('directions')}: ${esc(savedLabel(k))}"><span class="ic">${icon(k)}</span><span class="mid"><b>${esc(savedLabel(k))}</b><small>${esc([d, p.name].filter(Boolean).join(' · '))}</small></span></button><button class="saved-edit" data-action="saved-set" data-kind="${k}" aria-label="${t('saveChange')} ${esc(savedLabel(k))}">${icon('edit')}</button></div>`;
+  }).join('');
+  const k = S.saveMode;
+  const panel = k ? `<div class="save-panel" role="group" aria-label="${esc(tk('saveSetTitle', k))}">
+      <b>${esc(tk('saveSetTitle', k))}</b>
+      <button class="btn-ghost" data-action="saved-loc" data-kind="${k}">${icon('locate')}${t('saveUseLoc')}</button>
+      <button class="btn-ghost" data-action="saved-search" data-kind="${k}">${icon('search')}${t('saveSearch')}</button>
+      <div class="save-panel-foot">${S.saved[k] ? `<button class="link danger" data-action="saved-remove" data-kind="${k}">${t('saveRemove')}</button>` : '<span></span>'}<button class="link" data-action="saved-cancel">${t('cancel')}</button></div>
+      <small class="muted">${t('savedNote')}</small>
+    </div>` : '';
+  return `<div class="saved-bar">${cards}</div>${panel}`;
+}
+function saveButtons(p) {
+  const at = savedKindAt(S.saved, p.lat, p.lon);
+  return `<div class="save-row">${SAVED_KINDS.map((k) => (at === k
+    ? `<span class="tag ok">${icon(k)}${tk(k === 'home' ? 'savedAsHome' : 'savedAsWork', k)}</span>`
+    : `<button class="btn-ghost sm${S.saveMode === k ? ' pulse' : ''}" data-action="save-place" data-kind="${k}">${icon(k)}${tk(k === 'home' ? 'saveAsHome' : 'saveAsWork', k)}</button>`)).join('')}</div>`;
+}
+
 function viewExplore() {
   if (!S.cat) {
-    return `<div class="sh-head"><h2>${t('pickCat')}</h2></div><p class="muted">${t('pickCatHint')}</p>${quickGrid()}<div class="sub-card"><span class="sub-ic">${icon('mail')}</span><span class="mid"><b>${t('subTitle')}</b><small>${t('subCard')}</small></span><button class="btn sm" data-action="subscribe">${t('subBtn')}</button></div>`;
+    return `${savedBar()}<div class="sh-head"><h2>${t('pickCat')}</h2></div><p class="muted">${t('pickCatHint')}</p>${quickGrid()}<div class="sub-card"><span class="sub-ic">${icon('mail')}</span><span class="mid"><b>${t('subTitle')}</b><small>${t('subCard')}</small></span><button class="btn sm" data-action="subscribe">${t('subBtn')}</button></div>`;
   }
   const c = CATEGORIES[S.cat];
   const head = `<div class="sh-head"><h2>${esc(c[getLang()])} ${t('nearby').toLowerCase()}</h2>${S.places.length > 3 ? `<button class="link" data-action="toggle-all">${S.showAll ? t('showLess') : `${t('seeAll')} (${S.places.length})`}</button>` : ''}</div>`;
@@ -589,6 +634,7 @@ function viewPlace() {
     <p class="meta">${[CATEGORIES[p.cat]?.[getLang()], `${fmtDist(p.distKm)} ${t('away')}`].filter(Boolean).map(esc).join(' · ')}</p>
     ${p.meta ? `<p class="meta">${esc(p.meta)}</p>` : ''}
     ${p.address && p.address !== p.meta ? `<p class="meta">${esc(p.address)}</p>` : ''}
+    ${saveButtons(p)}
     <div class="tags">
       ${p.hours ? `<span class="tag">${t('hours')}: ${esc(p.hours)}</span>` : ''}
       ${near.map((a) => `<span class="tag ${a.severity === 'danger' ? 'danger' : 'warn'}">${esc(L(a, 'title'))}</span>`).join('')}
@@ -604,7 +650,7 @@ function viewPlace() {
 function viewDrive() {
   const lang = getLang();
   if (!S.dest) {
-    return `<div class="sh-head"><h2>${t('noDest')}</h2></div><p class="muted">${t('noDestHint')}</p>${quickGrid()}`;
+    return `${savedBar()}<div class="sh-head"><h2>${t('noDest')}</h2></div><p class="muted">${t('noDestHint')}</p>${quickGrid()}`;
   }
   const pts = `<div class="route-pts">
     <div class="route-pt"><span class="dot"></span><span>${S.routeOrigin === 'centre' ? t('mapCentre') : t('myLocation')}</span></div>
@@ -984,6 +1030,28 @@ function pickResult(r) {
   render();
 }
 
+async function savedAction(act, k) {
+  if (act === 'saved-go' && S.saved[k]) { const p = savedPlace(k); routeTo({ id: p.id, name: S.saved[k].name ? `${savedLabel(k)} · ${S.saved[k].name}` : savedLabel(k), lat: p.lat, lon: p.lon }); return; }
+  if (act === 'saved-set') { S.saveMode = S.saveMode === k ? null : k; render(); return; }
+  if (act === 'saved-cancel') { S.saveMode = null; render(); return; }
+  if (act === 'saved-remove') { S.saved = setSaved(k, null); S.saveMode = null; drawSaved(); render(); toast(tk('removedToast', k)); return; }
+  if (act === 'saved-search') { toast(tk('saveSearchHint', k)); q.focus(); return; }
+  if (act === 'saved-loc') {
+    const me = S.me || await locate({ fly: false });
+    if (!me) { toast(t('saveNoLoc')); return; }
+    const area = await placeName(me[1], me[0]).catch(() => '');
+    S.saved = setSaved(k, { name: area ? `${t('myLocation')}, ${area}` : `${t('myLocation')} (${me[1].toFixed(4)}, ${me[0].toFixed(4)})`, lat: me[1], lon: me[0] });
+    S.saveMode = null; drawSaved(); render(); toast(tk('savedToast', k));
+    return;
+  }
+  if (act === 'save-place' && S.selected) {
+    const p = S.selected;
+    S.saved = setSaved(k, { name: p.name, lat: p.lat, lon: p.lon });
+    S.saveMode = null; drawSaved(); render(); toast(tk('savedToast', k));
+  }
+}
+mapReady.then(drawSaved);
+
 // ---------------------------------------------------------------- events
 document.addEventListener('click', (e) => {
   const up = e.target.closest('[data-unpin]');
@@ -1005,6 +1073,7 @@ document.addEventListener('click', (e) => {
   const findPlace = (id) => S.places.find((p) => p.id === id) || (S.selected?.id === id ? S.selected : null);
   if (act === 'go') { const p = findPlace(el.dataset.place); if (p) routeTo({ id: p.id, name: p.name, lat: p.lat, lon: p.lon }); return; }
   if (el.dataset.place && !act) { const p = findPlace(el.dataset.place); if (p) selectPlace(p); return; }
+  if (act && act.startsWith('save')) { savedAction(act, el.dataset.kind); return; }
   if (act === 'toggle-all') { S.showAll = !S.showAll; setSheet(S.showAll ? 'full' : 'half'); render(); }
   if (act === 'retry') loadPlaces(S.cat);
   if (act === 'back') { S.selected = null; drawPlaces(); render(); }

@@ -10,6 +10,7 @@ It is a Progressive Web App (PWA): it works in any browser and can be installed 
 |---|---|---|
 | Live map | [MapLibre GL](https://maplibre.org) + [OpenFreeMap](https://openfreemap.org) tiles (OpenStreetMap data) | Free, no key |
 | Satellite view | Layers button → Satellite: [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) raster under the OpenFreeMap labels (hybrid). Choice saved in `localStorage` | Free with attribution; for commercial or high-volume use, get an ArcGIS Location Platform key or swap `SAT_TILES` in `src/main.js` |
+| Home & Work | `src/lib/saved.js`: saved on the device only (`localStorage` `navmap.saved`). Set from the current location or any place card ("Save as Home/Work"); one tap routes there | Free |
 | Place search | [Photon](https://photon.komoot.io) geocoder, limited to Malaysia | Free, no key |
 | Nearby EV, fuel, fast food, toilets, surau, hospitals | Preloaded for all of Malaysia from OpenStreetMap (`public/data/poi`, refreshed weekly by the *Update places data* GitHub Action), live [Overpass](https://overpass-api.de) as fallback | Free, no key |
 | Driving directions + alternatives | [OSRM](https://project-osrm.org) public demo server | Free, demo only (see below) |
