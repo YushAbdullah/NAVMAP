@@ -1076,11 +1076,79 @@ $('#lang-btn').addEventListener('click', () => {
   renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab();
   if (S.nav) updateHud();
 });
-$('#alerts-layer-btn').addEventListener('click', (e) => {
-  S.showAlertLayer = !S.showAlertLayer;
-  e.currentTarget.setAttribute('aria-pressed', String(S.showAlertLayer));
-  drawAlerts();
+// ---------------------------------------------------------------- map layers menu
+// Base map: the OpenFreeMap street map, or Esri World Imagery satellite photos with the
+// street map's place and road labels drawn on top (a "hybrid" view).
+const SAT_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const SAT_ATTR = 'Imagery © <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics';
+const labelPaint = new Map(); // original label colours, restored when leaving satellite
+const getBasemap = () => { try { return localStorage.getItem('navmap.basemap') === 'satellite' ? 'satellite' : 'map'; } catch { return 'map'; } };
+async function setBasemap(kind) {
+  try { localStorage.setItem('navmap.basemap', kind); } catch { /* private mode */ }
+  document.querySelectorAll('[data-basemap]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.basemap === kind)));
+  document.documentElement.dataset.basemap = kind;
+  await mapReady;
+  const sat = kind === 'satellite';
+  const layers = map.getStyle().layers;
+  if (sat && !map.getLayer('sat')) {
+    if (!map.getSource('sat')) map.addSource('sat', { type: 'raster', tiles: [SAT_TILES], tileSize: 256, maxzoom: 19, attribution: SAT_ATTR });
+    // under the base map's labels and under every NAVMAP layer (radar, alerts, routes)
+    const below = layers.find((l) => l.type === 'symbol' || /^(radar-|alert-|route-)/.test(l.id))?.id;
+    map.addLayer({ id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 200 } }, below);
+  } else if (!sat && map.getLayer('sat')) {
+    map.removeLayer('sat');
+    map.removeSource('sat');
+  }
+  // White labels with a dark outline read well on photos; restore the originals for the street map.
+  for (const l of layers) {
+    if (l.type !== 'symbol' || l.source === 'alerts' || l.id === 'sat') continue;
+    try {
+      if (sat) {
+        if (!labelPaint.has(l.id)) labelPaint.set(l.id, [map.getPaintProperty(l.id, 'text-color'), map.getPaintProperty(l.id, 'text-halo-color'), map.getPaintProperty(l.id, 'text-halo-width')]);
+        map.setPaintProperty(l.id, 'text-color', '#FFFFFF');
+        map.setPaintProperty(l.id, 'text-halo-color', 'rgba(0,0,0,0.75)');
+        map.setPaintProperty(l.id, 'text-halo-width', 1.4);
+      } else if (labelPaint.has(l.id)) {
+        const [c, h, w] = labelPaint.get(l.id);
+        map.setPaintProperty(l.id, 'text-color', c);
+        map.setPaintProperty(l.id, 'text-halo-color', h);
+        map.setPaintProperty(l.id, 'text-halo-width', w);
+      }
+    } catch { /* layer without text */ }
+  }
+}
+if (getBasemap() === 'satellite') setBasemap('satellite');
+
+const layersBtn = $('#alerts-layer-btn');
+const layersPop = $('#layers-pop');
+function placeLayersPop() {
+  const r = layersBtn.getBoundingClientRect();
+  const w = layersPop.offsetWidth, h = layersPop.offsetHeight;
+  const leftSide = r.left < window.innerWidth / 2;
+  const left = leftSide ? r.right + 8 : r.left - w - 8;
+  layersPop.style.left = `${Math.max(8, Math.min(left, window.innerWidth - w - 8))}px`;
+  layersPop.style.top = `${Math.max(8, Math.min(r.top, window.innerHeight - h - 8))}px`;
+}
+function toggleLayersPop(open = layersPop.hidden) {
+  layersPop.hidden = !open;
+  layersBtn.setAttribute('aria-expanded', String(open));
+  if (open) {
+    $('#lp-alerts').checked = S.showAlertLayer;
+    $('#lp-radar').checked = !!S.radar;
+    placeLayersPop();
+    layersPop.querySelector('[aria-checked="true"]')?.focus();
+  }
+}
+layersBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleLayersPop(); });
+layersPop.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-basemap]');
+  if (b) setBasemap(b.dataset.basemap);
 });
+$('#lp-alerts').addEventListener('change', (e) => { S.showAlertLayer = e.target.checked; drawAlerts(); });
+$('#lp-radar').addEventListener('change', (e) => { if (e.target.checked !== !!S.radar) toggleRadar(); });
+document.addEventListener('click', (e) => { if (!layersPop.hidden && !layersPop.contains(e.target)) toggleLayersPop(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !layersPop.hidden) { toggleLayersPop(false); layersBtn.focus(); } });
+window.addEventListener('resize', () => { if (!layersPop.hidden) placeLayersPop(); });
 
 // Pin dialog: what is happening at the centre of the map (or your location)
 const dlg = $('#report-dlg');

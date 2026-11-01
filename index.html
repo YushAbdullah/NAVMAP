@@ -58,7 +58,7 @@
       <button class="fab" id="report-btn" aria-label="Pin weather or hazard" data-i18n-aria="report">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V4h12l-1.5 4L16 12H4"/></svg>
       </button>
-      <button class="fab" id="alerts-layer-btn" aria-label="Show alerts on map" aria-pressed="true">
+      <button class="fab" id="alerts-layer-btn" aria-label="Map layers" data-i18n-aria="layersTitle" aria-haspopup="true" aria-expanded="false" aria-controls="layers-pop">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>
       </button>
       <button class="fab" id="locate-btn" aria-label="Centre on my location" data-i18n-aria="locate">
@@ -105,6 +105,17 @@
         </button>
       </nav>
     </section>
+
+    <!-- Map layers menu -->
+    <div id="layers-pop" class="layers-pop" role="dialog" aria-labelledby="layers-title" hidden>
+      <h3 id="layers-title" data-i18n="layersTitle">Map layers</h3>
+      <div class="lp-types" role="radiogroup" aria-labelledby="layers-title">
+        <button type="button" role="radio" data-basemap="map" aria-checked="true"><span class="lp-thumb lp-map"></span><span data-i18n="layerMap">Map</span></button>
+        <button type="button" role="radio" data-basemap="satellite" aria-checked="false"><span class="lp-thumb lp-sat"></span><span data-i18n="layerSat">Satellite</span></button>
+      </div>
+      <label class="lp-row"><input type="checkbox" id="lp-alerts" checked><span data-i18n="layerAlerts">Alerts and pins on map</span></label>
+      <label class="lp-row"><input type="checkbox" id="lp-radar"><span data-i18n="radarOn">Show rain radar</span></label>
+    </div>
 
     <!-- Report dialog -->
     <dialog id="report-dlg" aria-labelledby="report-title">
