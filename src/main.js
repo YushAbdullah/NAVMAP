@@ -1243,52 +1243,21 @@ $('#lang-btn').addEventListener('click', () => {
   if (S.nav) updateHud();
 });
 // ---------------------------------------------------------------- map layers menu
-// Base map: the OpenFreeMap street map, or Esri World Imagery satellite photos with the
-// street map's place and road labels drawn on top (a "hybrid" view).
-const SAT_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const SAT_ATTR = 'Imagery © <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics';
-const labelPaint = new Map(); // original label colours, restored when leaving satellite
-const BASEMAPS = ['map', 'satellite', 'play'];
+// Base map: the OpenFreeMap street map, or the Play view. (Satellite was removed on
+// 1 Nov 2026 at the owner's request; a saved "satellite" choice falls back to the map.)
+const BASEMAPS = ['map', 'play'];
 const getBasemap = () => { try { const v = localStorage.getItem('navmap.basemap'); return BASEMAPS.includes(v) ? v : 'map'; } catch { return 'map'; } };
 const isPlay = () => document.documentElement.dataset.basemap === 'play';
 async function setBasemap(kind) {
+  if (!BASEMAPS.includes(kind)) kind = 'map';
   try { localStorage.setItem('navmap.basemap', kind); } catch { /* private mode */ }
   document.querySelectorAll('[data-basemap]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.basemap === kind)));
   const wasPlay = isPlay();
   document.documentElement.dataset.basemap = kind;
   renderScore();
   await mapReady;
-  const sat = kind === 'satellite';
   const play = kind === 'play';
-  // Undo Play first so the satellite code below saves the street map's own label colours.
   if (!play) applyPlay(map, false);
-  const layers = map.getStyle().layers;
-  if (sat && !map.getLayer('sat')) {
-    if (!map.getSource('sat')) map.addSource('sat', { type: 'raster', tiles: [SAT_TILES], tileSize: 256, maxzoom: 19, attribution: SAT_ATTR });
-    // under the base map's labels and under every NAVMAP layer (radar, alerts, routes)
-    const below = layers.find((l) => l.type === 'symbol' || /^(radar-|alert-|route-)/.test(l.id))?.id;
-    map.addLayer({ id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 200 } }, below);
-  } else if (!sat && map.getLayer('sat')) {
-    map.removeLayer('sat');
-    map.removeSource('sat');
-  }
-  // White labels with a dark outline read well on photos; restore the originals for the street map.
-  for (const l of layers) {
-    if (l.type !== 'symbol' || l.source === 'alerts' || l.id === 'sat') continue;
-    try {
-      if (sat) {
-        if (!labelPaint.has(l.id)) labelPaint.set(l.id, [map.getPaintProperty(l.id, 'text-color'), map.getPaintProperty(l.id, 'text-halo-color'), map.getPaintProperty(l.id, 'text-halo-width')]);
-        map.setPaintProperty(l.id, 'text-color', '#FFFFFF');
-        map.setPaintProperty(l.id, 'text-halo-color', 'rgba(0,0,0,0.75)');
-        map.setPaintProperty(l.id, 'text-halo-width', 1.4);
-      } else if (labelPaint.has(l.id)) {
-        const [c, h, w] = labelPaint.get(l.id);
-        map.setPaintProperty(l.id, 'text-color', c);
-        map.setPaintProperty(l.id, 'text-halo-color', h);
-        map.setPaintProperty(l.id, 'text-halo-width', w);
-      }
-    } catch { /* layer without text */ }
-  }
   if (play) {
     applyPlay(map, true);
     if (!S.nav) map.easeTo({ pitch: PLAY_PITCH, zoom: Math.max(map.getZoom(), 16), duration: 900 });
@@ -1296,6 +1265,7 @@ async function setBasemap(kind) {
     if (r.badges.length) celebrate(r);
   } else if (wasPlay && !S.nav) map.easeTo({ pitch: 0, duration: 600 });
 }
+try { if (localStorage.getItem('navmap.basemap') === 'satellite') localStorage.setItem('navmap.basemap', 'map'); } catch { /* private mode */ }
 if (getBasemap() !== 'map') setBasemap(getBasemap());
 
 // ---------------------------------------------------------------- Play view: points and badges
