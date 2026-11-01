@@ -10,6 +10,7 @@ import { searchPlaces, reverseName } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
 import { getTransit, clock, delayMin, isWalk, isRail, TZ } from './lib/transit.js';
 import { RIDE_APPS, openRide, gmapsTransit } from './lib/rides.js';
+import { getVehicle, setVehicle, loadFuelPrices, FUEL_DEFAULT, EV_RATE, tollEstimate, fuelEstimate, evEstimate, transitFare, grabFare, rm } from './lib/tripcost.js';
 import { measure, along, pointHazards, routeHaze, routeStates, areaWarnings, hazardCount } from './lib/route-hazards.js';
 import { loadAlerts } from './lib/alerts.js';
 import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
@@ -43,6 +44,8 @@ const S = {
   routes: [], routeIdx: 0, routeStatus: 'idle', routeOrigin: null,
   mode: loadMode(),         // 'car' | 'moto' | 'bus' | 'train' (Drive tab travel mode)
   leaveAt: '',              // 'HH:MM' Malaysian time for bus and train trips; '' = now
+  vehicle: getVehicle(),    // fuel type and consumption for trip cost estimates
+  fuel: null,               // pump prices { ron95, budi95, ron97, diesel, date, live }
   alerts: [], alertMode: 'loading', alertsAt: null, alertFilter: 'all',
   reports: [],
   wx: null, wxStatus: 'idle', wxPlace: '', radar: false,
@@ -443,6 +446,7 @@ async function computeRoute() {
   routeAbort?.abort();
   routeAbort = new AbortController();
   S.routeErr = null;
+  if (!S.fuel) loadFuelPrices().then((f) => { S.fuel = f; if (S.tab === 'drive' && S.routes.length) render(); });
   try {
     const routes = isTransit()
       ? await getTransit({ from, to: [dest.lon, dest.lat], mode: S.mode, time: leaveIso() }, routeAbort.signal)
@@ -527,6 +531,8 @@ function ptSearch(v) {
 }
 document.addEventListener('input', (e) => { if (e.target.id === 'pt-q') ptSearch(e.target.value.trim()); });
 document.addEventListener('change', (e) => {
+  const veh = { 'veh-fuel': 'fuel', 'veh-car': 'carL', 'veh-moto': 'motoL', 'veh-ev': 'evKwh' }[e.target.id];
+  if (veh) { S.vehicle = setVehicle({ [veh]: e.target.value }); render(); return; }
   if (e.target.id !== 'leave-at') return;
   S.leaveAt = e.target.value || '';
   if (S.dest && isTransit()) computeRoute();
@@ -1038,6 +1044,8 @@ function viewDrive() {
     <div class="summary"><b>${fmtDur(r.duration, lang)}</b><span>${fmtDist(r.distance / 1000)}${r.via ? ` · ${t('via')} ${esc(r.via)}` : ''}</span></div>
     ${alts}${warn}
     ${go}
+    ${costView(r)}
+    ${compareView(r.distance / 1000, r.duration / 60)}
     ${ridesView()}
     <div class="sh-head" style="margin-top:16px"><h2 style="font-size:16px">${t('steps')}</h2></div>
     <ol class="list steps">${steps}</ol>`;
@@ -1098,6 +1106,7 @@ function viewTransit(r) {
     first ? t('transitDepart').replace('{t}', clock(first.start, lang)).replace('{s}', first.from.name) : '',
     r.transfers ? t(r.transfers === 1 ? 'transfer1' : 'transferN').replace('{n}', r.transfers) : t('transfer0'),
     r.walkSec > 60 ? t('walkMin').replace('{n}', Math.round(r.walkSec / 60)) : '',
+    t('fareAbout').replace('{rm}', rm(transitFare(r.distance / 1000, S.mode))),
   ].filter(Boolean).map(esc).join(' · ');
   const last = r.legs.length - 1;
   const legs = r.legs.map((l, i) => {
@@ -1119,8 +1128,65 @@ function viewTransit(r) {
     <p class="muted transit-sub">${sub}</p>
     ${alts}${routeHazardsView(r)}
     <ol class="list legs">${legs}</ol>
+    ${compareView(r.distance / 1000, null)}
     ${ridesView()}
     <p class="source">${t('transitSource')}</p>`;
+}
+
+// ---------------------------------------------------------------- trip cost (estimates)
+const FUELS = ['budi95', 'ron95', 'ron97', 'diesel'];
+const fuelPrices = () => S.fuel || { ...FUEL_DEFAULT, live: false };
+
+/** Car or motorcycle: tolls, fuel (litres and RM) and what an EV would cost for the same trip. */
+function costView(r) {
+  const km = r.distance / 1000, v = S.vehicle, moto = S.mode === 'moto', prices = fuelPrices();
+  const toll = tollEstimate(r.tolls, S.mode);
+  const fuel = fuelEstimate(km, S.mode, v, prices);
+  const ev = evEstimate(km, v);
+  const total = fuel.rm + toll.rm;
+  const tollRow = moto
+    ? `<li><span>${t('costToll')}</span><b>RM0</b><small>${esc(t(toll.count ? 'costTollMoto' : 'costTollNone'))}</small></li>`
+    : `<li><span>${t('costToll')}</span><b>${toll.count ? rm(toll.rm) : 'RM0'}</b><small>${esc(toll.count ? t('costTollKm').replace('{d}', fmtDist(toll.km)) : t('costTollNone'))}</small></li>`;
+  const save = total - (ev.home + (moto ? 0 : toll.rm));
+  const evRow = moto ? '' : `<li class="ev"><span>${icon('ev')}${t('costEv')}</span><b>${rm(ev.home + toll.rm)}</b>
+    <small>${esc(t('costEvDetail').replace('{kwh}', ev.kwh.toFixed(1)).replace('{home}', rm(ev.home)).replace('{pub}', rm(ev.public)))}</small>
+    ${save > 0.05 ? `<em class="save">${esc(t('costEvSave').replace('{rm}', rm(save)))}${fuel.rm - ev.public > 0.05 ? esc(t('costEvSavePub').replace('{pub}', rm(fuel.rm - ev.public))) : ''}</em>` : ''}</li>`;
+  const priceNote = prices.live && prices.date ? t('costPriceLive').replace('{date}', prices.date) : t('costPriceDefault');
+  return `<div class="cost card-box"><div class="cost-head"><h2>${t('costTitle')}</h2><span class="est">${t('estimate')}</span></div>
+    <ul class="cost-rows">
+      <li><span>${icon('fuel')}${t('costFuel')}</span><b>${rm(fuel.rm)}</b><small>${esc(t('costFuelDetail').replace('{l}', fuel.litres.toFixed(1)).replace('{fuel}', t(`fuel_${fuel.fuel}`)).replace('{p}', fuel.price.toFixed(2)))}</small></li>
+      ${tollRow}
+      <li class="total"><span>${t('costTotal')}</span><b>${rm(total)}</b></li>
+      ${evRow}
+    </ul>
+    <details class="veh"><summary>${icon('edit')}${t('vehTitle')}</summary>
+      <label>${t('vehFuel')}<select id="veh-fuel">${FUELS.map((f) => `<option value="${f}"${v.fuel === f ? ' selected' : ''}>${t(`fuel_${f}`)} · RM${(fuelPrices()[f] ?? FUEL_DEFAULT[f]).toFixed(2)}</option>`).join('')}</select></label>
+      <label>${t(moto ? 'vehMoto' : 'vehCar')}<input id="${moto ? 'veh-moto' : 'veh-car'}" type="number" inputmode="decimal" min="1" max="40" step="0.1" value="${moto ? v.motoL : v.carL}"></label>
+      ${moto ? '' : `<label>${t('vehEv')}<input id="veh-ev" type="number" inputmode="decimal" min="5" max="40" step="0.5" value="${v.evKwh}"></label>`}
+    </details>
+    <p class="source">${esc(priceNote)} ${esc(t('costNote').replace('{home}', EV_RATE.home.toFixed(2)).replace('{pub}', EV_RATE.public.toFixed(2)))}</p></div>`;
+}
+
+/** The same trip by every way of travelling, cheapest first. min = driving minutes when known. */
+function compareView(km, min) {
+  const v = S.vehicle, prices = fuelPrices();
+  const r = S.routes[S.routeIdx];
+  const tollCar = r && !r.transit ? tollEstimate(r.tolls, 'car').rm : 0;
+  const drive = min ?? (km / 30) * 60;
+  const g = grabFare(km, drive);
+  const rows = [
+    { m: 'car', rm: fuelEstimate(km, 'car', v, prices).rm + tollCar },
+    { m: 'moto', rm: fuelEstimate(km, 'moto', v, prices).rm },
+    { m: 'ev', rm: evEstimate(km, v).home + tollCar, label: t('costEvShort') },
+    { m: 'bus', rm: transitFare(km, 'bus') },
+    { m: 'train', rm: transitFare(km, 'train') },
+    { m: 'ride', rm: g.low, hi: g.high, label: t('costGrab') },
+  ].sort((a, b) => a.rm - b.rm);
+  const cheapest = rows[0].rm;
+  return `<div class="compare card-box"><div class="cost-head"><h2>${t('cmpTitle')}</h2><span class="est">${t('estimate')}</span></div>
+    <ul class="cmp-rows">${rows.map((x) => `<li${x.m === S.mode ? ' class="cur"' : ''}><span>${icon(x.m === 'ev' ? 'ev' : x.m)}${esc(x.label || t(`mode_${x.m}`))}</span>
+      <b>${x.hi ? `${rm(x.rm)}–${rm(x.hi)}` : rm(x.rm)}</b>${x.rm === cheapest ? `<em>${t('cmpCheapest')}</em>` : ''}</li>`).join('')}</ul>
+    <p class="source">${esc(t('cmpNote'))}</p></div>`;
 }
 
 /** Grab, AirAsia Ride and inDrive buttons. Grab gets pickup and drop-off; the others get the destination on the clipboard. */

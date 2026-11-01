@@ -10,6 +10,7 @@ export async function getRoutes(from, to, signal) {
   if (json.code !== 'Ok' || !json.routes?.length) throw new Error(json.message || 'No route found');
   return json.routes.map((r) => ({
     distance: r.distance, duration: r.duration,
+    tolls: tollStretches(r.legs.flatMap((l) => l.steps)),
     coords: r.geometry.coordinates,
     via: r.legs[0]?.summary || '',
     steps: r.legs.flatMap((l) => l.steps).map((s) => ({
@@ -18,6 +19,23 @@ export async function getRoutes(from, to, signal) {
       exit: s.maneuver.exit,
     })),
   }));
+}
+
+/**
+ * OSRM marks road segments that charge a toll ("toll" in intersection classes).
+ * Returns the tolled stretches as [{ km, name }], joining consecutive tolled steps.
+ */
+export function tollStretches(steps) {
+  const out = [];
+  let cur = null;
+  for (const s of steps) {
+    const toll = (s.intersections || []).some((i) => i.classes?.includes('toll'));
+    if (toll && s.distance > 0) {
+      if (!cur) { cur = { km: 0, name: s.ref || s.name || '' }; out.push(cur); }
+      cur.km += s.distance / 1000;
+    } else if (s.distance > 300) cur = null; // a short untolled link (ramp, plaza) keeps the stretch going
+  }
+  return out;
 }
 
 export function stepText(s, lang) {
