@@ -627,3 +627,26 @@ button.acard-head { cursor: pointer; }
 .ride-btn { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--brand); color: var(--brand-fg, #fff); font-weight: 600; font-size: 14px; }
 .ride-btn svg { width: 18px; height: 18px; flex: none; }
 .ride-note { font-size: 12px; margin-top: 8px; }
+
+/* ---------- Trip cost and comparison (estimates) ---------- */
+.card-box { margin-top: 16px; padding: 14px 14px 4px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.cost-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.cost-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.est { padding: 2px 8px; border-radius: 9999px; background: var(--warning-bg); color: #5C4000; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.cost-rows, .cmp-rows { list-style: none; margin: 0; padding: 0; }
+.cost-rows li, .cmp-rows li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.cost-rows li:last-child, .cmp-rows li:last-child { border-bottom: 0; }
+.cost-rows span, .cmp-rows span { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.cost-rows span svg, .cmp-rows span svg { width: 18px; height: 18px; flex: none; }
+.cost-rows b, .cmp-rows b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cost-rows small { grid-column: 1 / -1; color: var(--text-muted); font-size: 12px; }
+.cost-rows .total b { font-size: 18px; }
+.cost-rows .save { grid-column: 1 / -1; font-style: normal; font-weight: 600; font-size: 13px; color: var(--success); }
+.cmp-rows li { grid-template-columns: 1fr auto auto; }
+.cmp-rows li.cur { background: var(--surface-muted); margin: 0 -8px; padding: 8px; border-radius: 8px; }
+.cmp-rows em { font-style: normal; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: var(--primary); color: var(--on-primary, #003503); }
+.veh { margin: 6px 0; font-size: 14px; }
+.veh summary { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--success); font-weight: 500; min-height: 36px; }
+.veh summary svg { width: 16px; height: 16px; }
+.veh label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: var(--text-muted); font-size: 13px; }
+.veh select, .veh input { height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 15px; }
