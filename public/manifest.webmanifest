@@ -1,20 +1,28 @@
 {
+  "id": "/",
   "name": "NAVMAP Malaysia",
   "short_name": "NAVMAP",
-  "description": "Navigate Malaysia with live flood, weather and earthquake alerts.",
-  "start_url": "/",
+  "description": "Navigate Malaysia with live flood, weather and earthquake alerts. Find EV chargers, fuel, food, toilets, surau and hospitals near you.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
   "background_color": "#F6FEF6",
   "theme_color": "#F6FEF6",
   "lang": "en-MY",
+  "dir": "ltr",
+  "categories": ["navigation", "travel", "weather", "news"],
+  "prefer_related_applications": false,
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "EV charging nearby", "url": "/?cat=ev" },
-    { "name": "Fuel nearby", "url": "/?cat=fuel" }
+    { "name": "EV charging nearby", "short_name": "EV", "url": "/?cat=ev", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Fuel nearby", "short_name": "Fuel", "url": "/?cat=fuel", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

@@ -70,6 +70,21 @@ Until this is done, pins are saved on each person's own device only.
 
 GitHub → **Actions → Update places data → Run workflow**. It runs automatically every Monday and commits the new data, which redeploys the site.
 
+## Google Play app (Trusted Web Activity)
+
+NAVMAP is packaged for Google Play with [PWABuilder](https://www.pwabuilder.com) as a Trusted Web Activity: the Play app opens navmap.vercel.app full screen, so every website deploy updates the app too.
+
+- `public/manifest.webmanifest`: app name, colours, start URL, shortcuts and icons (`icons/icon-*.png` for normal use, `icons/maskable-*.png` with a full-bleed background for Android adaptive icons).
+- `public/sw.js`: caches the app shell and current JS/CSS so the installed app opens without signal; `public/offline.html` is the last-resort page.
+- `public/.well-known/assetlinks.json`: proves the Play app and the website belong together. Package name is `app.vercel.navmap.twa` (must match the PWABuilder Package ID).
+
+**After building the package**, replace the two placeholders in `assetlinks.json`:
+
+1. `REPLACE_WITH_PWABUILDER_SIGNING_KEY_SHA256`: the SHA-256 in `assetlinks.json` (or `signing-key-info.txt`) inside the PWABuilder zip.
+2. `REPLACE_WITH_GOOGLE_PLAY_APP_SIGNING_KEY_SHA256`: Play Console → your app → Test and release → App integrity → App signing → "App signing key certificate" SHA-256.
+
+Fingerprints look like `AB:CD:12:...` (32 pairs). Once deployed, check https://navmap.vercel.app/.well-known/assetlinks.json. If either is wrong, the app still works but shows a browser address bar at the top. Keep `signing.keystore` and its passwords from the zip somewhere safe: every future app update must be signed with it.
+
 ## Project layout
 
 ```
