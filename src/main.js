@@ -61,6 +61,37 @@ const map = new maplibregl.Map({
 });
 const mapReady = new Promise((resolve) => map.on('load', resolve));
 
+// ---------------------------------------------------------------- weak signal and offline
+// On 2G or with Data Saver on, extras (news, logos, counter) wait longer so the map comes first.
+const conn = navigator.connection;
+function slowNet() { return !!conn && (conn.saveData === true || /(^|-)2g$/.test(conn.effectiveType || '')); }
+// Run extras once the map has loaded (or after 8 s if it is still loading), then when the phone is idle.
+function afterMap(fn, delay = 0) {
+  const go = () => setTimeout(() => (window.requestIdleCallback || setTimeout)(() => fn(), { timeout: 2000 }), slowNet() ? delay + 4000 : delay);
+  Promise.race([mapReady, new Promise((r) => setTimeout(r, 8000))]).then(go);
+}
+
+// Which data on screen is a saved copy (source -> ISO time it was fetched).
+const SAVED = {};
+function noteSaved(src, at) {
+  if (at) SAVED[src] = at; else delete SAVED[src];
+  renderOffline();
+}
+function renderOffline() {
+  const el = document.querySelector('#offline-pill');
+  if (!el) return;
+  const offline = navigator.onLine === false;
+  const times = Object.values(SAVED).filter(Boolean).sort();
+  if (!offline && !times.length) { el.hidden = true; return; }
+  const lang = getLang();
+  const when = times.length ? ` · ${t('offlineSaved')} ${fmtAgo(times[0], lang)}` : '';
+  el.innerHTML = `${icon('wifiOff')}<span><b>${t(offline ? 'offlineTitle' : 'weakTitle')}</b> ${t('offlineBody')}${when}</span>`;
+  el.hidden = false;
+}
+addEventListener('offline', renderOffline);
+addEventListener('online', () => { renderOffline(); refreshAlerts(); loadWeather(true); loadPins(); });
+setInterval(renderOffline, 60e3); // keep "saved X min ago" current
+
 map.on('load', () => {
   tintStyle();
   map.addSource('alerts', { type: 'geojson', data: fc([]) });
@@ -125,10 +156,11 @@ function pinEl(cls, iconName, label, logo = '') {
 
 // Brand logos (McDonald's, KFC, Petronas…) from brands.json, built weekly from Wikidata.
 // The category icon stays underneath, so a logo that fails to load just shows the icon.
-fetch('/data/poi/brands.json').then((r) => (r.ok ? r.json() : {})).then((b) => {
+// Loaded after the map is up, so it never competes with the first map tiles.
+afterMap(() => fetch('/data/poi/brands.json').then((r) => (r.ok ? r.json() : {})).then((b) => {
   S.brands = b || {};
   if (S.places.length) { drawPlaces(); render(); }
-}).catch(() => {});
+}).catch(() => {}), 500);
 function brandLogo(p, width = 64) {
   const b = p.brand && LOGO_CATS.includes(p.cat) && S.brands[p.brand];
   return b ? `<img class="brand-logo" src="${esc(logoUrl(b.f, width))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.parentNode.classList.remove('has-logo');this.remove()">` : '';
@@ -635,6 +667,7 @@ function stopNav() {
 async function refreshAlerts() {
   const d = await loadAlerts();
   S.alerts = d.alerts; S.alertMode = d.mode; S.alertsAt = d.fetchedAt;
+  noteSaved('alerts', d.saved ? d.fetchedAt || d.saved : null);
   drawAlerts();
   renderBanner();
   render();
@@ -862,6 +895,7 @@ async function loadWeather(force = false) {
   try {
     const [wx, name] = await Promise.all([fetchWeather(at[1], at[0]), placeName(at[1], at[0])]);
     S.wx = wx; S.wxPlace = name; S.wxStatus = 'ok';
+    noteSaved('weather', wx.saved);
   } catch { if (!S.wx) S.wxStatus = 'error'; }
   renderWxFab();
   renderAqFab();
@@ -1126,7 +1160,7 @@ async function loadNews(force = false) {
   renderNewsBar();
 }
 setInterval(() => { if (!document.hidden) loadNews(); }, 5 * 60e3);
-setTimeout(() => loadNews(), 2500);
+afterMap(() => loadNews(), 1500);
 
 // ---------------------------------------------------------------- public visitor counter
 // Anonymous: the server keeps only a fuzzy daily count, never who visited (see api/stats.js).
@@ -1152,7 +1186,7 @@ async function loadStats() {
     else if (html) document.querySelector('#sheet-body .copyright')?.insertAdjacentHTML('beforebegin', html);
   } catch { /* counter is optional */ }
 }
-setTimeout(loadStats, 1500);
+afterMap(loadStats, 1000);
 setInterval(() => { if (!document.hidden) loadStats(); }, 10 * 60e3);
 
 // Headline ticker above the alert banner: rotates the most relevant fresh stories, tap to read.
@@ -1649,7 +1683,7 @@ locate({ fly: true, quiet: true });
 refreshAlerts();
 setInterval(refreshAlerts, ALERT_REFRESH_MS);
 loadPins();
-setInterval(() => { if (document.visibilityState === 'visible') loadPins(); }, 30 * 1000);
+setInterval(() => { if (document.visibilityState === 'visible') loadPins(); }, (slowNet() ? 90 : 30) * 1000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadPins(); loadWeather(); } });
 setTimeout(() => loadWeather(), 1200);
 

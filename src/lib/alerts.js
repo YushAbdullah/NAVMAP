@@ -14,7 +14,8 @@ export async function loadAlerts() {
     const ct = r.headers.get('content-type') || '';
     if (r.ok && ct.includes('json')) {
       const d = await r.json();
-      if (d.live) return { alerts: d.alerts, mode: 'live', fetchedAt: d.fetchedAt, partial: d.errors };
+      // x-navmap-saved: the service worker answered with the last saved copy (weak or no signal)
+      if (d.live) return { alerts: d.alerts, mode: 'live', fetchedAt: d.fetchedAt, partial: d.errors, saved: r.headers.get('x-navmap-saved') };
     }
   } catch { /* fall through */ }
   try {

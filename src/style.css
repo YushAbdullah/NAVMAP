@@ -572,3 +572,9 @@ button.acard-head { cursor: pointer; }
 .list li > .votes { margin: 6px 0 2px 52px; }
 .acard-meta .votes { width: 100%; }
 .mid small.pin-trust, .pin-trust { white-space: normal; overflow: visible; text-overflow: clip; }
+
+/* ---------- Offline / weak signal notice ---------- */
+.offline-pill { pointer-events: auto; align-self: center; display: flex; align-items: center; gap: 8px; margin: 0; max-width: 100%; padding: 8px 14px; border-radius: 14px; background: var(--ink); color: #fff; font-size: 13px; line-height: 1.3; box-shadow: var(--e2); }
+.offline-pill[hidden] { display: none; }
+.offline-pill svg { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.offline-pill b { font-weight: 600; }

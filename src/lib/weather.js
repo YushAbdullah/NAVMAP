@@ -51,8 +51,9 @@ export async function fetchWeather(lat, lon) {
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max',
   });
   const aq = new URLSearchParams({ latitude: la, longitude: lo, timezone: 'Asia/Kuala_Lumpur', current: 'us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide', hourly: 'us_aqi', forecast_days: '2' });
+  let saved = null; // set when the service worker gave us the last saved forecast (offline)
   const p = Promise.all([
-    fetch(`https://api.open-meteo.com/v1/forecast?${fc}`).then((r) => { if (!r.ok) throw new Error('weather'); return r.json(); }),
+    fetch(`https://api.open-meteo.com/v1/forecast?${fc}`).then((r) => { if (!r.ok) throw new Error('weather'); saved = r.headers.get('x-navmap-saved'); return r.json(); }),
     fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${aq}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   ]).then(([f, a]) => {
     const now = Date.now();
@@ -66,7 +67,7 @@ export async function fetchWeather(lat, lon) {
     }));
     const c = f.current;
     return {
-      at: new Date().toISOString(), lat: la, lon: lo,
+      at: saved || new Date().toISOString(), saved, lat: la, lon: lo,
       now: { temp: c.temperature_2m, feels: c.apparent_temperature, humidity: c.relative_humidity_2m, rain: c.precipitation, wind: c.wind_speed_10m, code: c.weather_code, isDay: c.is_day },
       hours, days,
       aqi: a?.current?.us_aqi ?? null, pm25: a?.current?.pm2_5 ?? null,
@@ -87,7 +88,7 @@ export async function fetchWeather(lat, lon) {
     };
   });
   cache.set(key, { at: Date.now(), p });
-  p.catch(() => cache.delete(key));
+  p.then((w) => { if (w.saved) cache.delete(key); }, () => cache.delete(key)); // try the network again next time
   return p;
 }
 
