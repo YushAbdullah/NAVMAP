@@ -678,3 +678,15 @@ button.acard-head { cursor: pointer; }
 .voice-opt[aria-checked="true"] { border-color: var(--primary); background: var(--surface-tint); }
 .voice-play { color: var(--text-subtle); }
 .voice-body .sm { margin-top: 14px; font-size: 12px; }
+
+/* ---------- Toll choice and the moving car during navigation ---------- */
+.toll-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; font-size: 14px; font-weight: 500; }
+.toll-bar .chip { box-shadow: none; background: var(--surface-muted); height: 36px; }
+.toll-bar .chip[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.alt .alt-toll { color: var(--text-muted); }
+.alt .alt-toll.free { color: var(--success); font-weight: 600; }
+.me.nav-car { width: 44px; height: 44px; background: none; box-shadow: none; }
+.me.nav-car .car-arrow { width: 44px; height: 44px; filter: drop-shadow(0 3px 4px rgba(0,30,10,.45)); }
+.me.nav-car .car-arrow path { fill: #2D7FF9; stroke: #fff; stroke-width: 3; stroke-linejoin: round; }
+.recentre { position: absolute; z-index: 7; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px; border: 0; border-radius: 9999px; background: var(--ink); color: var(--primary); font-weight: 600; font-size: 15px; box-shadow: var(--e2); }
+.recentre[hidden] { display: none; }

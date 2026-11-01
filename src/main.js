@@ -45,6 +45,7 @@ const S = {
   routes: [], routeIdx: 0, routeStatus: 'idle', routeOrigin: null,
   mode: loadMode(),         // 'car' | 'moto' | 'bus' | 'train' (Drive tab travel mode)
   leaveAt: '',              // 'HH:MM' Malaysian time for bus and train trips; '' = now
+  avoidTolls: (() => { try { return localStorage.getItem('navmap.avoidTolls') === '1'; } catch { return false; } })(),
   vehicle: getVehicle(),    // fuel type and consumption for trip cost estimates
   fuel: null,               // pump prices { ron95, budi95, ron97, diesel, date, live }
   alerts: [], alertMode: 'loading', alertsAt: null, alertFilter: 'all',
@@ -221,14 +222,101 @@ function drawStart() {
   startMarker = new maplibregl.Marker({ element: pinEl('start', 'nav', S.start.name) }).setLngLat([S.start.lon, S.start.lat]).addTo(map);
 }
 
-function drawMe() {
+function drawMe(glide = false) {
   if (!S.me) return;
   if (!meMarker) {
     const el = document.createElement('div');
     el.className = 'me';
     el.setAttribute('aria-label', t('myLocation'));
     meMarker = new maplibregl.Marker({ element: el }).setLngLat(S.me).addTo(map);
-  } else meMarker.setLngLat(S.me);
+  }
+  // While navigating, the dot becomes a car arrow pointing the way you are going, gliding between GPS fixes.
+  const el = meMarker.getElement();
+  const car = Boolean(S.nav) && !isPlay();
+  el.classList.toggle('nav-car', car);
+  meMarker.setRotationAlignment(S.nav ? 'map' : 'auto');
+  meMarker.setPitchAlignment(car ? 'map' : 'auto');
+  if (car && !el.querySelector('.car-arrow')) el.innerHTML = '<svg class="car-arrow" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 4 33 34 20 27 7 34z"/></svg>';
+  if (!car && el.querySelector('.car-arrow')) el.innerHTML = '';
+  meMarker.setRotation(S.nav ? S.nav.heading || 0 : 0);
+  if (glide) glideMarker(meMarker, S.me); else meMarker.setLngLat(S.me);
+}
+
+let glideRaf = 0;
+function glideMarker(m, to, ms = 900) {
+  cancelAnimationFrame(glideRaf);
+  const from = m.getLngLat().toArray();
+  if (distKm(from, to) > 0.5) { m.setLngLat(to); return; } // a jump (first fix, tunnel): no slide
+  const t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / ms);
+    m.setLngLat([from[0] + (to[0] - from[0]) * k, from[1] + (to[1] - from[1]) * k]);
+    if (k < 1) glideRaf = requestAnimationFrame(step);
+  };
+  glideRaf = requestAnimationFrame(step);
+}
+
+const bearingDeg = (a, b) => {
+  const r = Math.PI / 180, y = Math.sin((b[0] - a[0]) * r) * Math.cos(b[1] * r);
+  const x = Math.cos(a[1] * r) * Math.sin(b[1] * r) - Math.sin(a[1] * r) * Math.cos(b[1] * r) * Math.cos((b[0] - a[0]) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+};
+/** Direction of the road ahead of point p on route r. */
+function routeBearing(r, p) {
+  const i = nearestIdx(r, p);
+  let j = i + 1;
+  while (j < r.coords.length - 1 && distKm(r.coords[i], r.coords[j]) < 0.03) j++; // ~30 m ahead
+  return j >= r.coords.length ? map.getBearing() : bearingDeg(r.coords[i], r.coords[j]);
+}
+/** Which way the car points: the phone's compass course when moving, else movement since the last fix, else the road. */
+function carHeading(pos, prev, r) {
+  const c = pos.coords;
+  if (Number.isFinite(c.heading) && c.speed > 1.5) return c.heading;
+  if (prev && distKm(prev, S.me) > 0.008) return bearingDeg(prev, S.me);
+  return S.nav?.heading ?? routeBearing(r, S.me);
+}
+/** Keep the car in the lower part of the screen, under the direction card, so more road ahead shows. */
+function navPadding() {
+  const hud = $('#hud')?.offsetHeight || 160;
+  return { top: hud + Math.round(innerHeight * 0.28), bottom: 40, left: 40, right: 40 };
+}
+
+/** Car or motorcycle: also ask for a route that avoids toll roads, and offer it as a choice. */
+async function withNoToll(from, to, signal) {
+  const [main, free] = await Promise.all([
+    getRoutes(from, to, signal),
+    getRoutes(from, to, signal, { noToll: true }).catch(() => []),
+  ]);
+  if (!main[0]?.tolls?.length) return main; // already toll-free
+  const tollFree = free.filter((r) => !r.tolls?.length)[0];
+  const same = tollFree && main.find((m) => !m.tolls?.length && Math.abs(m.distance - tollFree.distance) < 50);
+  if (same) { same.noToll = true; return main; }
+  if (!tollFree) return main;
+  tollFree.noToll = true;
+  return [...main.slice(0, 2), tollFree];
+}
+
+function tollTag(r) {
+  if (!r.tolls?.length) return r.label === 'noToll' ? '' : ` · ${t('tollFree')}`;
+  return ` · ${t('tollShort')} ${rm(tollEstimate(r.tolls, S.mode).rm)}`;
+}
+
+/** Tolls: allowed or avoided. The choice is remembered and picks the matching route. */
+function tollBar() {
+  const anyToll = S.routes.some((x) => x.tolls?.length);
+  if (!anyToll) return '';
+  const free = S.routes.findIndex((x) => !x.tolls?.length);
+  return `<div class="toll-bar" role="group" aria-label="${esc(t('tollTitle'))}"><span>${t('tollTitle')}</span>
+    <button class="chip" data-action="tolls" data-v="use" aria-pressed="${!S.avoidTolls}">${t('tollUse')}</button>
+    <button class="chip" data-action="tolls" data-v="avoid" aria-pressed="${S.avoidTolls}">${t('tollAvoid')}</button></div>
+    ${S.avoidTolls && free < 0 ? `<p class="muted pt-note">${t('tollNoFree')}</p>` : ''}`;
+}
+function setAvoidTolls(on) {
+  S.avoidTolls = on;
+  try { localStorage.setItem('navmap.avoidTolls', on ? '1' : ''); } catch { /* private mode */ }
+  const pick = on ? S.routes.findIndex((x) => !x.tolls?.length) : 0;
+  if (pick >= 0) S.routeIdx = pick;
+  drawRoutes(); render();
 }
 
 function drawReports() {
@@ -451,11 +539,11 @@ async function computeRoute() {
   try {
     const routes = isTransit()
       ? await getTransit({ from, to: [dest.lon, dest.lat], mode: S.mode, time: leaveIso() }, routeAbort.signal)
-      : await getRoutes(from, [dest.lon, dest.lat], routeAbort.signal);
+      : await withNoToll(from, [dest.lon, dest.lat], routeAbort.signal);
     routes.forEach(scanRoute);
     labelRoutes(routes);
     S.routes = routes;
-    S.routeIdx = 0;
+    S.routeIdx = S.avoidTolls && !isTransit() ? Math.max(0, routes.findIndex((x) => x.noToll)) : 0;
     S.routeStatus = 'ok';
     drawRoutes();
     checkRouteArea(routes, routeAbort.signal);
@@ -558,7 +646,7 @@ function labelRoutes(routes) {
   if (routes[0]?.transit) { routes.forEach((r) => { r.label = 'alt'; }); return; }
   const n0 = hazardCount(routes[0]);
   const safer = routes.findIndex((r) => hazardCount(r) < n0);
-  routes.forEach((r, i) => { r.label = i === 0 ? 'fastest' : (i === safer ? 'safest' : 'alt'); });
+  routes.forEach((r, i) => { r.label = i === 0 ? 'fastest' : (i === safer ? 'safest' : r.noToll ? 'noToll' : 'alt'); });
 }
 
 /** Haze and state weather warnings need network lookups, so they arrive a moment after the route. */
@@ -666,7 +754,10 @@ function startNav() {
   if (navigator.geolocation) {
     S.nav.watchId = navigator.geolocation.watchPosition(onNavPos, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
   }
-  map.easeTo({ center: S.me || r.coords[0], zoom: 16.5, pitch: isPlay() ? PLAY_PITCH : 45, padding: mapPadding(), duration: 800 });
+  S.nav.follow = true;
+  S.nav.heading = routeBearing(r, S.me || r.coords[0]);
+  drawMe();
+  map.easeTo({ center: S.me || r.coords[0], zoom: 17.5, bearing: S.nav.heading, pitch: isPlay() ? PLAY_PITCH : 55, padding: navPadding(), duration: 900 });
   updateHud();
   const g = award('nav');
   if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 3400);
@@ -691,8 +782,10 @@ const sayTitle = (a, pk) => (pk.base === 'bm' && a.title_bm) || a.title || '';
 function onNavPos(pos) {
   const r = S.routes[S.routeIdx];
   if (!r || !S.nav || S.nav.rerouting) return;
+  const prev = S.me;
   S.me = [pos.coords.longitude, pos.coords.latitude];
-  drawMe();
+  S.nav.heading = carHeading(pos, prev, r);
+  drawMe(true);
   const lang = getLang();
 
   // Off route? Three bad fixes in a row (ignoring very inaccurate fixes) triggers a reroute.
@@ -741,7 +834,11 @@ function onNavPos(pos) {
     toast(`${title}${a.place ? ` · ${a.place}` : ''}`);
   }
 
-  map.easeTo({ center: S.me, bearing: Number.isFinite(pos.coords.heading) && pos.coords.speed > 1 ? pos.coords.heading : map.getBearing(), duration: 600 });
+  // Follow the car, heading up, zooming out a little at highway speed. A drag on the map pauses this.
+  if (S.nav.follow) {
+    const kmh = (pos.coords.speed || 0) * 3.6;
+    map.easeTo({ center: S.me, bearing: S.nav.heading, zoom: kmh > 80 ? 16 : kmh > 40 ? 16.8 : 17.5, padding: navPadding(), duration: 900 });
+  }
   updateHud();
 }
 
@@ -767,9 +864,11 @@ async function reroute() {
   say((p) => p.reroute);
   $('#hud-text').textContent = lang === 'bm' ? 'Mengira semula laluan…' : 'Rerouting…';
   try {
-    const routes = await getRoutes(S.me, [S.dest.lon, S.dest.lat]);
+    const keepOff = Boolean(S.routes[S.routeIdx]?.noToll);
+    const routes = await getRoutes(S.me, [S.dest.lon, S.dest.lat], undefined, { noToll: keepOff }).catch(() => getRoutes(S.me, [S.dest.lon, S.dest.lat]));
     if (!S.nav) return;
     const old = S.routes[S.routeIdx];
+    routes.forEach((x) => { x.noToll = keepOff && !x.tolls?.length; });
     routes.forEach((x) => { x.states = old?.states; x.haze = old?.haze; scanRoute(x); x.label = 'fastest'; });
     S.routes = [routes[0]]; S.routeIdx = 0;
     S.nav.step = 1; S.nav.said = new Set(); S.nav.offCount = 0;
@@ -849,7 +948,27 @@ function stopNav() {
   if (voiceSupported()) speechSynthesis.cancel();
   document.body.classList.remove('navigating');
   $('#hud').hidden = true;
+  recentreBtn().hidden = true;
+  drawMe();
   map.easeTo({ pitch: isPlay() ? PLAY_PITCH : 0, bearing: 0, duration: 600 });
+}
+
+/** Shown when the driver drags the map during navigation; tap to follow the car again. */
+function recentreBtn() {
+  let b = $('#recentre');
+  if (!b) {
+    b = document.createElement('button');
+    b.id = 'recentre'; b.className = 'recentre'; b.dataset.action = 'recentre'; b.hidden = true;
+    b.innerHTML = `${icon('nav')}<span>${t('recentre')}</span>`;
+    $('#app').appendChild(b);
+  }
+  return b;
+}
+function recentre() {
+  if (!S.nav) return;
+  S.nav.follow = true;
+  recentreBtn().hidden = true;
+  map.easeTo({ center: S.me || map.getCenter(), bearing: S.nav.heading || 0, zoom: 17.5, pitch: isPlay() ? PLAY_PITCH : 55, padding: navPadding(), duration: 700 });
 }
 
 // ---------------------------------------------------------------- alerts
@@ -1071,8 +1190,8 @@ function viewDrive() {
   if (!r) return pts;
   if (r.transit) return `${pts}${viewTransit(r)}`;
   const alts = S.routes.length > 1 ? `<div class="alts" role="group">${S.routes.map((x, i) =>
-    `<button class="alt" data-route="${i}" aria-pressed="${i === S.routeIdx}"><b>${fmtDur(x.duration, lang)}</b>${t(x.label)} · ${fmtDist(x.distance / 1000)}${hazardCount(x) ? ` · ⚠ ${hazardCount(x)}` : ''}</button>`).join('')}</div>` : '';
-  const warn = routeHazardsView(r);
+    `<button class="alt" data-route="${i}" aria-pressed="${i === S.routeIdx}"><b>${fmtDur(x.duration, lang)}</b>${t(x.label)} · ${fmtDist(x.distance / 1000)}${hazardCount(x) ? ` · ⚠ ${hazardCount(x)}` : ''}<span class="alt-toll${x.tolls?.length ? '' : ' free'}">${tollTag(x)}</span></button>`).join('')}</div>` : '';
+  const warn = `${tollBar()}${routeHazardsView(r)}`;
   const steps = r.steps.map((s) => `<li class="row"><span class="ic info">${maneuverIcon(s)}</span><span class="mid"><b style="font-size:15px;font-weight:500;white-space:normal">${esc(stepText(s, lang))}</b></span><span class="end"><small style="color:var(--text-subtle)">${s.distance ? fmtDist(s.distance / 1000) : ''}</small></span></li>`).join('');
   // Live turn-by-turn follows GPS, so it needs the route to begin where the user is.
   const go = S.start
@@ -1753,6 +1872,8 @@ document.addEventListener('click', (e) => {
   if (act === 'pt-reset-start') { S.start = null; computeRoute(); }
   if (act === 'start-nav') startNav();
   if (act === 'mode') setMode(el.dataset.mode);
+  if (act === 'tolls') setAvoidTolls(el.dataset.v === 'avoid');
+  if (act === 'recentre') recentre();
   if (act === 'ride') bookRide(el.dataset.app);
   if (act === 'leave-now') { S.leaveAt = ''; if (S.dest) computeRoute(); }
   if (act === 'pin-weather') openPinDialog();
@@ -1783,7 +1904,10 @@ const LEVELS = ['peek', 'half', 'full'];
 function openSheet() { if (sheetState === 'peek') setSheet('half'); }
 const stepSheet = (dir) => setSheet(LEVELS[Math.max(0, Math.min(2, LEVELS.indexOf(sheetState) + dir))]);
 
-map.on('dragstart', () => { if (isMobile() && !S.nav) setSheet('peek'); });
+map.on('dragstart', (e) => {
+  if (S.nav && e.originalEvent) { S.nav.follow = false; recentreBtn().hidden = false; return; }
+  if (isMobile() && !S.nav) setSheet('peek');
+});
 map.on('click', (e) => {
   if (S.picking) { pickedAt(e.lngLat); return; }
   if (isMobile() && !S.nav) setSheet(sheetState === 'peek' ? 'half' : 'peek');
