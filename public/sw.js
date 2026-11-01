@@ -1,6 +1,6 @@
 // Minimal service worker: caches the app shell so NAVMAP opens offline.
 // Map tiles, routes and alerts always go to the network (they must be fresh).
-const CACHE = 'navmap-shell-v2';
+const CACHE = 'navmap-shell-v3';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
