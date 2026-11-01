@@ -11,7 +11,12 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Font loads without blocking the first paint (system font shows until it arrives) -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap"></noscript>
+  <!-- Start the map connection while the app code downloads -->
+  <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
+  <link rel="preload" as="fetch" href="https://tiles.openfreemap.org/styles/positron" crossorigin>
 </head>
 <body>
   <div id="app">
@@ -26,6 +31,8 @@
         <button type="button" class="icon-btn" id="lang-btn" aria-label="Switch language">BM</button>
       </form>
       <ul class="results" id="results" role="listbox" hidden></ul>
+
+      <p class="offline-pill" id="offline-pill" role="status" hidden></p>
 
       <div class="chips" id="chips" role="toolbar" aria-label="Find nearby"></div>
 

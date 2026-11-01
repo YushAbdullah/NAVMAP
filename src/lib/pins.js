@@ -56,7 +56,7 @@ export async function listPins() {
     if (r.ok && d?.configured) {
       shared = true;
       writeVote('', null, new Set(d.pins.map((p) => p.id))); // forget votes on pins that are gone
-      return d.pins.map(toAlert);
+      return d.pins.filter(alive).map(toAlert); // a saved (offline) copy may hold expired pins
     }
   } catch { /* fall through */ }
   shared = false;
