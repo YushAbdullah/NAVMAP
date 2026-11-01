@@ -9,9 +9,12 @@ import { CATEGORIES, fetchNearby, prefetchNearby } from './lib/places.js';
 import { searchPlaces } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
 import { loadAlerts } from './lib/alerts.js';
+import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
 import { speak, spokenDist, setVoice, voiceOn, voiceSupported } from './lib/voice.js';
 import { PIN_TYPES } from './lib/pin-types.js';
 import { listPins, addPin, removePin } from './lib/pins.js';
+import { applyPlay, PLAY_PITCH } from './lib/play.js';
+import { award, getScore, levelOf, LEVEL_PTS, BADGES } from './lib/score.js';
 import * as pinsMod from './lib/pins.js';
 import { getSaved, setSaved, savedKindAt, SAVED_KINDS } from './lib/saved.js';
 import { LOGO_CATS, logoUrl } from './lib/brands.js';
@@ -374,8 +377,10 @@ function startNav() {
   if (navigator.geolocation) {
     S.nav.watchId = navigator.geolocation.watchPosition(onNavPos, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
   }
-  map.easeTo({ center: S.me || r.coords[0], zoom: 16.5, pitch: 45, padding: mapPadding(), duration: 800 });
+  map.easeTo({ center: S.me || r.coords[0], zoom: 16.5, pitch: isPlay() ? PLAY_PITCH : 45, padding: mapPadding(), duration: 800 });
   updateHud();
+  const g = award('nav');
+  if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 3400);
 }
 
 /** "In 500 metres, turn left onto Jalan Pudu" */
@@ -495,7 +500,7 @@ function stopNav() {
   if (voiceSupported()) speechSynthesis.cancel();
   document.body.classList.remove('navigating');
   $('#hud').hidden = true;
-  map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+  map.easeTo({ pitch: isPlay() ? PLAY_PITCH : 0, bearing: 0, duration: 600 });
 }
 
 // ---------------------------------------------------------------- alerts
@@ -858,16 +863,41 @@ function viewAlerts() {
   const head = `<div class="sh-head"><h2>${t('alertsTitle')}</h2><small style="color:var(--text-subtle);font-size:12px">${S.alertsAt ? `${t('updated')} ${fmtAgo(S.alertsAt, lang)}` : ''}</small></div>`;
   if (S.alertMode === 'loading') return `${head}<div class="empty-state"><span class="spinner"></span></div>`;
   const sample = S.alertMode === 'sample' ? `<div class="note">${icon('accident')}<span>${t('sample')}</span></div>` : '';
-  const rows = list.length ? `<ul class="list">${list.slice(0, 150).map((a) => {
-    const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
-    const ic = a.kind === 'report' ? (a.icon || 'report') : a.kind;
-    return `<li><button class="row wrap" data-alert="${esc(a.id)}">
-      <span class="ic ${a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info'}">${icon(ic)}</span>
-      <span class="mid"><b style="font-size:15px">${esc(L(a, 'title'))}</b><small>${esc(a.place ? `${a.place} · ` : '')}${esc(L(a, 'desc'))}</small><small>${esc(a.source)} · ${esc(fmtAgo(a.time, lang))}</small></span>
-      ${d != null ? `<span class="end"><b>${fmtDist(d)}</b></span>` : ''}
-    </button></li>`;
-  }).join('')}</ul>` : `<div class="empty-state">${icon('weather')}${t('noAlerts')}</div>`;
+  const rows = list.length ? `<ul class="alist">${list.slice(0, 150).map((a) => alertCard(a, ref, lang)).join('')}</ul>` : `<div class="empty-state">${icon('weather')}${t('noAlerts')}</div>`;
   return `${head}${sample}${filters}${rows}<p class="source">${t('sourceNote')}</p>`;
+}
+
+// One alert as a card: severity + time, short title, one-line summary, state chips, valid-until,
+// and the full official text folded behind "Show details".
+function alertCard(a, ref, lang) {
+  const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
+  const ic = a.kind === 'report' ? (a.icon || 'report') : a.kind;
+  const sev = a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info';
+  const sevLabel = t(a.severity === 'danger' ? 'sevDanger' : a.severity === 'warning' ? 'sevWarning' : 'sevInfo');
+  const desc = L(a, 'desc') || '';
+  const long = a.kind === 'weather' || desc.length > 140;
+  const summary = long ? [alertSummary(desc), a.kind === 'weather' ? seaNumbers(desc, lang) : ''].filter(Boolean).join(' ') : [a.place, desc].filter(Boolean).join(' · ');
+  const states = a.kind === 'weather' ? alertStates(desc) : [];
+  const marine = a.kind === 'weather' && isMarine(desc);
+  const MAXC = 4;
+  const chips = [
+    ...(marine ? [`<span class="tag sea">${icon('wind')}${t('seaAreas')}</span>`] : []),
+    ...states.slice(0, MAXC).map((s) => `<span class="tag">${esc(s)}</span>`),
+    ...(states.length > MAXC ? [`<span class="tag more">+${states.length - MAXC}</span>`] : []),
+  ].join('');
+  const until = a.validTo ? fmtUntil(a.validTo, lang) : '';
+  const instr = L(a, 'instruction');
+  const top = `<span class="acard-top"><span class="sev ${sev}">${sevLabel}</span><span class="ago">${esc(fmtAgo(a.time, lang))}</span></span>`;
+  const main = `<span class="ic ${sev}">${icon(ic)}</span>
+      <span class="mid">${top}<b>${esc(tidyTitle(L(a, 'title')))}</b>${summary ? `<span class="sum">${esc(summary)}</span>` : ''}</span>
+      ${d != null ? `<span class="end"><b>${fmtDist(d)}</b></span>` : ''}`;
+  const headEl = a.lat != null
+    ? `<button class="acard-head" data-alert="${esc(a.id)}" aria-label="${t('showOnMap')}: ${esc(L(a, 'title'))}">${main}</button>`
+    : `<div class="acard-head">${main}</div>`;
+  const meta = (chips || until) ? `<div class="acard-meta">${chips ? `<div class="tags">${chips}</div>` : ''}${until ? `<span class="until">${icon('clock')}${t('until')} ${esc(until)}</span>` : ''}</div>` : '';
+  const details = long ? `<details class="acard-more"><summary><span class="open">${t('showDetails')}</span><span class="shut">${t('hideDetails')}</span></summary>
+      <div class="atext">${alertTextHtml(desc, esc)}${instr ? `<p class="instr">${esc(instr)}</p>` : ''}</div></details>` : '';
+  return `<li class="acard ${sev}">${headEl}${meta}${details}<small class="asrc">${esc(a.source)}</small></li>`;
 }
 
 // ---------------------------------------------------------------- live news (environment & nature)
@@ -1160,7 +1190,7 @@ $('#hud-voice').addEventListener('click', () => {
 $('#lang-btn').addEventListener('click', () => {
   setLang(getLang() === 'en' ? 'bm' : 'en');
   $('#lang-btn').textContent = getLang() === 'en' ? 'BM' : 'EN';
-  renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab();
+  renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab(); renderScore();
   if (S.nav) updateHud();
 });
 // ---------------------------------------------------------------- map layers menu
@@ -1169,13 +1199,20 @@ $('#lang-btn').addEventListener('click', () => {
 const SAT_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const SAT_ATTR = 'Imagery © <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics';
 const labelPaint = new Map(); // original label colours, restored when leaving satellite
-const getBasemap = () => { try { return localStorage.getItem('navmap.basemap') === 'satellite' ? 'satellite' : 'map'; } catch { return 'map'; } };
+const BASEMAPS = ['map', 'satellite', 'play'];
+const getBasemap = () => { try { const v = localStorage.getItem('navmap.basemap'); return BASEMAPS.includes(v) ? v : 'map'; } catch { return 'map'; } };
+const isPlay = () => document.documentElement.dataset.basemap === 'play';
 async function setBasemap(kind) {
   try { localStorage.setItem('navmap.basemap', kind); } catch { /* private mode */ }
   document.querySelectorAll('[data-basemap]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.basemap === kind)));
+  const wasPlay = isPlay();
   document.documentElement.dataset.basemap = kind;
+  renderScore();
   await mapReady;
   const sat = kind === 'satellite';
+  const play = kind === 'play';
+  // Undo Play first so the satellite code below saves the street map's own label colours.
+  if (!play) applyPlay(map, false);
   const layers = map.getStyle().layers;
   if (sat && !map.getLayer('sat')) {
     if (!map.getSource('sat')) map.addSource('sat', { type: 'raster', tiles: [SAT_TILES], tileSize: 256, maxzoom: 19, attribution: SAT_ATTR });
@@ -1203,8 +1240,53 @@ async function setBasemap(kind) {
       }
     } catch { /* layer without text */ }
   }
+  if (play) {
+    applyPlay(map, true);
+    if (!S.nav) map.easeTo({ pitch: PLAY_PITCH, zoom: Math.max(map.getZoom(), 16), duration: 900 });
+    const r = award('explore');
+    if (r.badges.length) celebrate(r);
+  } else if (wasPlay && !S.nav) map.easeTo({ pitch: 0, duration: 600 });
 }
-if (getBasemap() === 'satellite') setBasemap('satellite');
+if (getBasemap() !== 'map') setBasemap(getBasemap());
+
+// ---------------------------------------------------------------- Play view: points and badges
+function renderScore() {
+  const chip = $('#score-chip');
+  if (!chip) return;
+  chip.hidden = !isPlay();
+  const s = getScore();
+  chip.innerHTML = `<span class="sc-lvl">${esc(t('playLevel'))} ${levelOf(s.pts)}</span><span class="sc-pts">⭐ ${s.pts}</span>`;
+  chip.setAttribute('aria-label', `${t('playLevel')} ${levelOf(s.pts)}, ${s.pts} ${t('playPoints')}`);
+}
+function celebrate({ gained, badges }) {
+  renderScore();
+  const bm = getLang() === 'bm';
+  const parts = [];
+  if (gained) parts.push(`+${gained} ${t('playPoints')}`);
+  for (const b of badges) parts.push(`${b.icon} ${t('playBadge')}: ${bm ? b.bm : b.en}`);
+  if (parts.length) toast(parts.join(' · '));
+  if (gained && isPlay()) {
+    const chip = $('#score-chip');
+    chip.classList.remove('bump'); void chip.offsetWidth; chip.classList.add('bump');
+  }
+}
+function renderScoreDialog() {
+  const s = getScore();
+  const bm = getLang() === 'bm';
+  const lvl = levelOf(s.pts);
+  const into = s.pts % LEVEL_PTS;
+  $('#score-body').innerHTML = `
+    <p class="sc-big"><b>${esc(t('playLevel'))} ${lvl}</b> · ⭐ ${s.pts} ${esc(t('playPoints'))}</p>
+    <div class="sc-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${LEVEL_PTS}" aria-valuenow="${into}"><span style="width:${(into / LEVEL_PTS) * 100}%"></span></div>
+    <p class="muted">${esc(t('playNext').replace('{n}', LEVEL_PTS - into))}</p>
+    <ul class="sc-badges">${BADGES.map((b) => {
+      const got = s.badges.includes(b.id);
+      return `<li class="${got ? 'got' : ''}"><span class="sc-ic" aria-hidden="true">${got ? b.icon : '🔒'}</span><span><b>${esc(bm ? b.bm : b.en)}</b><small>${esc(bm ? b.bmHint : b.enHint)}</small></span></li>`;
+    }).join('')}</ul>
+    <p class="muted sc-how">${esc(t('playHow'))}</p>`;
+}
+$('#score-chip').addEventListener('click', () => { renderScoreDialog(); $('#score-dlg').showModal(); });
+$('#score-close').addEventListener('click', () => $('#score-dlg').close());
 
 const layersBtn = $('#alerts-layer-btn');
 const layersPop = $('#layers-pop');
@@ -1256,6 +1338,8 @@ $('#report-grid').addEventListener('click', async (e) => {
     S.reports = [...S.reports.filter((x) => x.id !== r.id), r];
     drawAlerts(); renderBanner(); render();
     toast(pinsMod.shared ? t('pinnedShared') : t('pinnedLocal'));
+    const g = award('pin');
+    if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 2400);
   } catch (err) {
     toast(err.message === 'rate' ? t('pinRate') : t('pinFailed'));
   }
