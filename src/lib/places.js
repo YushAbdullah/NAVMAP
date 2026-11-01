@@ -92,8 +92,8 @@ const cache = new Map();
 // Built weekly by scripts/build-pois.mjs (GitHub Action). Served from the CDN, so it is instant.
 export const CELL_DEG = 1;
 export const cellKey = (lat, lon) => `${Math.floor(lat / CELL_DEG)}_${Math.floor(lon / CELL_DEG)}`;
-export const packPlace = (p) => [p.id, p.name, +p.lat.toFixed(5), +p.lon.toFixed(5), p.meta, p.address, p.hours, p.phone, p.website];
-const unpack = (a, cat) => ({ id: a[0], cat, name: a[1] || ({ workshop: 'Car workshop', police: 'Police station', fire: 'Fire station', shelter: 'Evacuation shelter' }[cat] || CATEGORIES[cat]?.en || 'Place'), lat: a[2], lon: a[3], meta: a[4] || '', address: a[5] || '', hours: a[6] || '', phone: a[7] || '', website: a[8] || '' });
+export const packPlace = (p) => { const a = [p.id, p.name, +p.lat.toFixed(5), +p.lon.toFixed(5), p.meta, p.address, p.hours, p.phone, p.website]; if (p.brand) a.push(p.brand); return a; };
+const unpack = (a, cat) => ({ id: a[0], cat, name: a[1] || ({ workshop: 'Car workshop', police: 'Police station', fire: 'Fire station', shelter: 'Evacuation shelter' }[cat] || CATEGORIES[cat]?.en || 'Place'), lat: a[2], lon: a[3], meta: a[4] || '', address: a[5] || '', hours: a[6] || '', phone: a[7] || '', website: a[8] || '', brand: a[9] || '' });
 
 let manifestP = null;
 function manifest() {
@@ -197,5 +197,6 @@ export function toPlace(el, cat) {
     hours: t.opening_hours || '',
     phone: t.phone || t['contact:phone'] || '',
     website: t.website || t['contact:website'] || '',
+    brand: /^Q\d+$/.test(t['brand:wikidata'] || '') ? t['brand:wikidata'] : '',
   };
 }

@@ -30,6 +30,7 @@ It is a Progressive Web App (PWA): it works in any browser and can be installed 
 | Public visitor counter | `api/stats.js`: daily HyperLogLog in the same Upstash Redis (`navmap:v:<date>`, Malaysia time, kept 40 days). Shows "N visitors today · N live pins" above the footer. Stores no IP or identifier; skips bots and browsers sending Do Not Track / GPC | Free |
 | Car workshops & tyre shops nearby | Overpass (`shop=car_repair`/`tyres`) | Free, no key |
 | Emergency places: police, Bomba, evacuation shelters | Overpass (`amenity=police`, `amenity=fire_station`; shelters = `emergency=assembly_point`/`evacuation_centre`, `social_facility=shelter`, or names with "Pusat Pemindahan"). Also "Nearest help" buttons in the SOS sheet, plus a link to InfoBencana JKM for relief centres open during floods | Free, no key |
+| Brand logos (fast food, fuel) | OSM `brand:wikidata` → Wikidata logo (P8972/P154) → Wikimedia Commons thumbnail. Looked up in the weekly build (`src/lib/brands.js`, writes `public/data/poi/brands.json`); falls back to the category icon | Free, no key |
 | BM / EN | Toggle in the search bar | – |
 
 If the alert feeds cannot be reached, the app shows **clearly labelled sample alerts** instead of failing silently.
