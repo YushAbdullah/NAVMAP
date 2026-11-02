@@ -1,8 +1,8 @@
 // About NAVMAP: who made it, vision and mission, objectives, why it exists, the ecosystem,
 // and how it uses public data to solve community problems. English and Bahasa Melayu.
 //
-// Text in [square brackets] is a placeholder for the founder to fill in. Nothing personal
-// about the founder is made up here.
+// "About me" follows the founder's own site, yushabdullah.github.io. Any text in
+// [square brackets] shows as a dashed placeholder box.
 
 import { icon } from './icons.js';
 
@@ -12,9 +12,11 @@ const C = {
     tagline: 'A free live map for Malaysia that keeps you moving and keeps you safe.',
     meH: 'About me',
     me: [
-      "Hi, I'm Yush Abdullah (Yusri), the founder of NAVMAP. I build NAVMAP on my own, as an independent Malaysian project.",
-      '[Add a few lines about yourself: your background, what you do, where you are from, and what got you into maps and safety.]',
+      "Hi, I'm Yusri Abdullah (Yush Abdullah), the founder of NAVMAP. I'm a product owner and PMO lead in Kuala Lumpur, and I build NAVMAP on my own as an independent Malaysian project.",
+      "I started out in public policy. I studied Government and Public Policy, then earned a Master's in Business Management. Since then I have worked in digital marketing, customer operations, HR, public health research and teaching, and today I own a hiring product at Aventra Group.",
+      'Outside work I write books and white papers, speak, train and volunteer, from business planning workshops for young entrepreneurs to leadership training for Indigenous communities. NAVMAP brings that wish to serve the community together with what I do every day: building products people trust.',
     ],
+    meLink: 'More about me:',
     visionH: 'Vision',
     vision: 'Every Malaysian can travel safely and confidently, with the right information about the road, the weather and the community around them, free of charge.',
     missionH: 'Mission',
@@ -57,9 +59,11 @@ const C = {
     tagline: 'Peta langsung percuma untuk Malaysia yang memudahkan perjalanan dan menjaga keselamatan anda.',
     meH: 'Tentang saya',
     me: [
-      'Hai, saya Yush Abdullah (Yusri), pengasas NAVMAP. Saya membina NAVMAP sendiri sebagai projek bebas anak Malaysia.',
-      '[Tambah beberapa ayat tentang diri anda: latar belakang, pekerjaan, asal anda, dan apa yang membuatkan anda berminat dengan peta dan keselamatan.]',
+      'Hai, saya Yusri Abdullah (Yush Abdullah), pengasas NAVMAP. Saya seorang pemilik produk dan peneraju PMO di Kuala Lumpur, dan saya membina NAVMAP sendiri sebagai projek bebas anak Malaysia.',
+      'Saya bermula dalam bidang dasar awam. Saya belajar Kerajaan dan Dasar Awam, kemudian memperoleh Sarjana Pengurusan Perniagaan. Sejak itu saya bekerja dalam pemasaran digital, operasi pelanggan, sumber manusia, penyelidikan kesihatan awam dan pengajaran, dan kini saya memiliki produk pengambilan pekerja di Aventra Group.',
+      'Di luar kerja, saya menulis buku dan kertas putih, berucap, melatih dan menjadi sukarelawan, daripada bengkel perancangan perniagaan untuk usahawan muda hingga latihan kepimpinan untuk komuniti Orang Asli. NAVMAP menggabungkan keinginan untuk berkhidmat kepada komuniti dengan apa yang saya lakukan setiap hari: membina produk yang dipercayai orang.',
     ],
+    meLink: 'Lebih lanjut tentang saya:',
     visionH: 'Visi',
     vision: 'Setiap rakyat Malaysia boleh bergerak dengan selamat dan yakin, dengan maklumat yang tepat tentang jalan raya, cuaca dan komuniti di sekeliling mereka, secara percuma.',
     missionH: 'Misi',
@@ -108,7 +112,7 @@ export const aboutTitle = (lang) => C[lang]?.title || C.en.title;
 export function aboutHtml(lang) {
   const c = C[lang] || C.en;
   return `<p class="ab-tag">${esc(c.tagline)}</p>
-    <section class="ab-sec"><h3>${icon('user')}${esc(c.meH)}</h3>${c.me.map(para).join('')}</section>
+    <section class="ab-sec"><h3>${icon('user')}${esc(c.meH)}</h3>${c.me.map(para).join('')}<p>${esc(c.meLink)} <a href="https://yushabdullah.github.io" target="_blank" rel="noopener">yushabdullah.github.io</a></p></section>
     <section class="ab-sec ab-vm">
       <div><h3>${icon('locate')}${esc(c.visionH)}</h3><p>${esc(c.vision)}</p></div>
       <div><h3>${icon('arrive')}${esc(c.missionH)}</h3><p>${esc(c.mission)}</p></div>
