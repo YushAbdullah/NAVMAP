@@ -41,6 +41,9 @@ const MAX_TOPICS = 500;
 const TOPICS_PER_HOUR = 10;       // new discussions per network per hour
 const SB_URL = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const SB_ANON = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Admins: confirmed members whose email is in ADMIN_EMAILS (comma separated) can remove any
+// pin, update or discussion, and their posts carry an Admin badge.
+const ADMINS = new Set((process.env.ADMIN_EMAILS || 'muhdyusry.abdullah@gmail.com').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean));
 // Welcome email (optional): SMTP_USER + SMTP_PASS, e.g. a Gmail address and its app password.
 const SMTP = {
   host: process.env.SMTP_HOST || 'smtp.gmail.com', port: Number(process.env.SMTP_PORT || 465),
@@ -94,7 +97,7 @@ const cKey = (id) => `navmap:pinc:${id}`;   // list of updates (JSON), newest la
 const rKey = (id) => `navmap:pincr:${id}`;  // who pressed Helpful / Report on which update (hashed)
 
 const publicComment = (c, me, pinOwner) => ({
-  id: c.id, at: c.at, text: c.text, tag: c.tag || null, handle: c.handle, member: !!c.member,
+  id: c.id, at: c.at, text: c.text, tag: c.tag || null, handle: c.handle, member: !!c.member, admin: !!c.admin,
   helpful: c.helpful || 0, mine: me.ids.includes(c.by), byPinner: !!pinOwner && c.by === pinOwner,
 });
 
@@ -127,13 +130,14 @@ async function whoIs(req) {
         const u = await r.json();
         const md = u.user_metadata || {};
         const name = cleanName(md.display_name) || cleanName(String(md.full_name || md.name || '').split(' ')[0]) || 'Member';
-        member = { id: u.id, name, key: sha(`user:${u.id}`), email: u.email || '', confirmed: !!(u.email_confirmed_at || u.confirmed_at) };
+        const confirmed = !!(u.email_confirmed_at || u.confirmed_at);
+        member = { id: u.id, name, key: sha(`user:${u.id}`), email: u.email || '', confirmed, admin: confirmed && ADMINS.has(String(u.email || '').toLowerCase()) };
       }
     } catch { /* treat as anonymous */ }
   }
   // author = what posts are stored under; ids = everything that counts as "mine"
   const author = member ? member.key : owner;
-  return { deviceToken, owner, member, author, ids: [owner, member?.key].filter(Boolean) };
+  return { deviceToken, owner, member, author, admin: !!member?.admin, ids: [owner, member?.key].filter(Boolean) };
 }
 
 async function readComments(id) {
@@ -182,7 +186,7 @@ async function addComment(p, { text, tag }, me, ipHash, ip) {
   const c = {
     id: randomBytes(4).toString('hex'), at: new Date().toISOString(), text: clean.text, tag: tg,
     handle: me.member ? me.member.name : handleFrom(sha(`handle:${deviceToken}`)), by: me.author, helpful: 0, flags: 0,
-    ...(me.member ? { member: true } : {}),
+    ...(me.member ? { member: true } : {}), ...(me.admin ? { admin: true } : {}),
   };
   await redis('RPUSH', cKey(p.id), JSON.stringify(c));
   await redis('LTRIM', cKey(p.id), -MAX_COMMENTS, -1);
@@ -331,7 +335,7 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET') {
       const [pins, topics] = await Promise.all([activePins(), activeTopics()]);
-      res.status(200).json({ configured: true, pins: pins.map((p) => publicPin(p, owner)), topics: topics.map((x) => publicTopic(x, me)), member: me.member ? { name: me.member.name } : null });
+      res.status(200).json({ configured: true, pins: pins.map((p) => publicPin(p, owner)), topics: topics.map((x) => publicTopic(x, me)), member: me.member ? { name: me.member.name, admin: me.admin } : null });
       return;
     }
     if (req.method === 'POST') {
@@ -469,7 +473,7 @@ export default async function handler(req, res) {
       const list = id ? await readComments(id) : [];
       const c = list.find((x) => x.id === cid);
       if (!c) { res.status(404).json({ configured: true, error: 'Not found' }); return; }
-      if (!me.ids.includes(c.by)) { res.status(403).json({ configured: true, error: 'Only the person who wrote it can remove it' }); return; }
+      if (!me.ids.includes(c.by) && !me.admin) { res.status(403).json({ configured: true, error: 'Only the person who wrote it can remove it' }); return; }
       await redis('LREM', cKey(id), 1, JSON.stringify(c));
       await saveSummary(id, list.filter((x) => x.id !== cid));
       res.status(200).json({ configured: true, ok: true });
@@ -477,10 +481,18 @@ export default async function handler(req, res) {
     }
     if (req.method === 'DELETE') {
       const id = String(req.query.id || '');
+      if (isTopicId(id)) {
+        // only admins remove a whole news discussion
+        if (!me.admin) { res.status(403).json({ configured: true, error: 'Admins only' }); return; }
+        await redis('HDEL', TKEY, id);
+        await redis('DEL', cKey(id), rKey(id));
+        res.status(200).json({ configured: true, ok: true });
+        return;
+      }
       const raw = id && (await redis('HGET', KEY, id));
       if (!raw) { res.status(404).json({ configured: true, error: 'Not found' }); return; }
       const p = JSON.parse(raw);
-      if (!owner || p.owner !== owner) { res.status(403).json({ configured: true, error: 'Only the person who pinned it can remove it' }); return; }
+      if ((!owner || p.owner !== owner) && !me.admin) { res.status(403).json({ configured: true, error: 'Only the person who pinned it can remove it' }); return; }
       await dropPins([id]);
       res.status(200).json({ configured: true, ok: true });
       return;

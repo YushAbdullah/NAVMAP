@@ -1727,7 +1727,7 @@ function viewCommunity(lang, ref) {
 
 function accountLine() {
   const u = auth.user();
-  if (u) return `<div class="acct">${icon('user')}<span>${t('postingAs').replace('{n}', `<b>${esc(auth.displayName(u) || t('commMember'))}</b>`)} <span class="cm-badge mem">${t('commMember')}</span></span><button class="link" data-action="account">${t('accountLink')}</button></div>`;
+  if (u) return `<div class="acct">${icon('user')}<span>${t('postingAs').replace('{n}', `<b>${esc(auth.displayName(u) || t('commMember'))}</b>`)} ${pinsMod.me?.admin ? `<span class="cm-badge admin">${t('commAdmin')}</span>` : `<span class="cm-badge mem">${t('commMember')}</span>`}</span><button class="link" data-action="account">${t('accountLink')}</button></div>`;
   return `<div class="acct">${icon('user')}<span>${t('postingAnon')}</span>${auth.available() ? `<button class="link" data-action="join">${t('signInLink')}</button>` : ''}</div>`;
 }
 
@@ -1782,7 +1782,8 @@ function viewThread(lang, ref) {
       <div class="cm-row"><small class="cm-rules">${auth.user() ? t('commRulesMember').replace('{n}', esc(auth.displayName() || t('commMember'))) : t('commRules')}</small><span class="cm-count" id="cm-count">${len}/${MAX_TEXT}</span>
       <button class="btn sm" type="submit"${th.sending ? ' disabled' : ''}>${th.sending ? '<span class="spinner"></span>' : icon('nav')}${t('commSend')}</button></div>
     </form>`;
-  return `${back}${card}${accountLine()}${composer}<div id="thread-list">${threadList(lang)}</div>`;
+  const adminBar = pinsMod.me?.admin ? `<div class="admin-bar">${icon('shield')}<span>${t('adminTools')}</span><button type="button" class="btn-ghost sm" data-action="admin-remove">${t(isTopic ? 'adminRemoveTopic' : 'adminRemovePin')}</button></div>` : '';
+  return `${back}${card}${adminBar}${accountLine()}${composer}<div id="thread-list">${threadList(lang)}</div>`;
 }
 
 function threadList(lang) {
@@ -1794,13 +1795,13 @@ function threadList(lang) {
   return `<h3 class="cm-h">${esc(updatesLabel(list.length))}</h3><ul class="clist">${list.map((c) => `<li class="cm">
       ${avatar(c.handle)}
       <div class="cm-body">
-        <div class="cm-top"><b>${esc(c.handle)}</b>${c.member ? `<span class="cm-badge mem">${t('commMember')}</span>` : ''}${c.byPinner ? `<span class="cm-badge">${t('commPinner')}</span>` : ''}${c.mine ? `<span class="cm-badge you">${t('commYou')}</span>` : ''}<small>${esc(fmtAgo(c.at, lang))}</small></div>
+        <div class="cm-top"><b>${esc(c.handle)}</b>${c.admin ? `<span class="cm-badge admin">${t('commAdmin')}</span>` : c.member ? `<span class="cm-badge mem">${t('commMember')}</span>` : ''}${c.byPinner ? `<span class="cm-badge">${t('commPinner')}</span>` : ''}${c.mine ? `<span class="cm-badge you">${t('commYou')}</span>` : ''}<small>${esc(fmtAgo(c.at, lang))}</small></div>
         ${c.tag ? tagChip(c.tag) : ''}${c.text ? `<p>${esc(c.text)}</p>` : ''}
         <div class="cm-acts">
           ${c.mine ? (c.helpful ? `<span class="cm-help-n">${icon('heart')}${c.helpful}</span>` : '')
             : `<button type="button" data-action="cm-helpful" data-cid="${esc(c.id)}" aria-pressed="${!!c.helpedByMe}">${icon('heart')}${t('commHelpful')}${c.helpful ? ` ${c.helpful}` : ''}</button>`}
           ${c.mine ? `<button type="button" data-action="cm-del" data-cid="${esc(c.id)}">${t('commDelete')}</button>`
-            : `<button type="button" class="quiet" data-action="cm-flag" data-cid="${esc(c.id)}">${t('commReport')}</button>`}
+            : `<button type="button" class="quiet" data-action="cm-flag" data-cid="${esc(c.id)}">${t('commReport')}</button>${pinsMod.me?.admin ? `<button type="button" class="admin" data-action="cm-del" data-cid="${esc(c.id)}">${t('adminRemove')}</button>` : ''}`}
         </div>
       </div></li>`).join('')}</ul>`;
 }
@@ -2060,6 +2061,17 @@ auth.onChange((u, evt) => {
   if (u?.email_confirmed_at && (evt === 'SIGNED_IN' || evt === 'INITIAL_SESSION')) requestWelcome(u.id); // once per member
   if (S.tab === 'alerts' || S.tab === 'news') render();
 });
+
+async function adminRemove(id) {
+  if (!confirm(t('adminRemoveQ'))) return;
+  const ok = await removePin(id).catch(() => false);
+  if (!ok) { toast(t('commFailed')); return; }
+  S.reports = S.reports.filter((r) => r.pinId !== id);
+  S.thread = null;
+  toast(t('adminRemoved'));
+  await loadPins();
+  drawAlerts(); renderBanner(); render();
+}
 
 async function discussNews(n) {
   try {
@@ -2326,6 +2338,7 @@ document.addEventListener('click', (e) => {
   if (act === 'thread') { const id = el.dataset.pin; gate(() => openThread(id)); return; }
   if (act === 'discuss') { const n = newsShown[Number(el.dataset.i)]; if (n) gate(() => discussNews(n)); return; }
   if (act === 'join') { openJoin('start'); return; }
+  if (act === 'admin-remove' && S.thread) { adminRemove(S.thread.pinId); return; }
   if (act === 'account') { openJoin('account'); return; }
   if (act === 'thread-back') { S.thread = null; S.alertFilter = 'report'; render(); return; }
   if (act === 'thread-retry' && S.thread) { S.thread.status = 'loading'; render(); loadThread(); }

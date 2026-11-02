@@ -40,7 +40,8 @@ async function hdrs(json = false) {
   return { ...(json ? { 'content-type': 'application/json' } : {}), 'x-navmap-token': token(), ...(await authHeader().catch(() => ({}))) };
 }
 
-export let topics = [];   // news discussions (see shareNews)
+export let topics = [];
+export let me = null;      // { name, admin } while signed in as a member   // news discussions (see shareNews)
 export let shared = null; // true = everyone sees pins; false = device only; null = unknown yet
 
 /** Pin -> the alert shape the rest of the app understands. */
@@ -66,6 +67,7 @@ export async function listPins() {
       shared = true;
       writeVote('', null, new Set(d.pins.map((p) => p.id))); // forget votes on pins that are gone
       topics = (d.topics || []).map(toTopic);
+      me = d.member || null;
       return d.pins.filter(alive).map(toAlert); // a saved (offline) copy may hold expired pins
     }
   } catch { /* fall through */ }

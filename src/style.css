@@ -798,3 +798,9 @@ button.acard-head { cursor: pointer; }
 .join-row .btn { width: auto; flex: 1; }
 .join-msg { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--danger-bg); color: var(--danger); font-size: 14px; }
 .join-msg.ok { background: var(--surface-tint); color: var(--on-primary); margin-bottom: 14px; }
+.cm-badge.admin { background: var(--danger); color: #fff; }
+.cm-acts button.admin { color: var(--danger); }
+.admin-bar { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 12px; border-radius: 10px; background: var(--danger-bg); color: var(--danger); font-size: 13px; font-weight: 600; }
+.admin-bar > svg { width: 16px; height: 16px; }
+.admin-bar > span { flex: 1; }
+.admin-bar .btn-ghost { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }

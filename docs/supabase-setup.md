@@ -47,6 +47,12 @@ Gmail allows about 500 emails a day. If NAVMAP grows past that, move to Resend w
    - plus `SMTP_USER` / `SMTP_PASS` from step 2b
 3. **Deployments → Redeploy** the latest production deployment.
 
+## 4b. Your admin account
+Admin is linked to your email, so you create it yourself (nobody else ever sees your password):
+1. Open https://navmap.vercel.app → Alerts → Community → **Continue with Google** using muhdyusry.abdullah@gmail.com (or Register with email using that address and confirm the email).
+2. That's it: NAVMAP recognises the email and gives you an **Admin** badge and **Admin tools** (remove any pin, update or news discussion for everyone).
+3. To add more admins later, set `ADMIN_EMAILS` in Vercel to a comma-separated list, e.g. `muhdyusry.abdullah@gmail.com,friend@gmail.com`, and redeploy.
+
 ## 5. Check it
 - Open https://navmap.vercel.app/api/pins?config=1 — it should show your Supabase URL.
 - Alerts → Community: the join screen appears. Try Google, then try Register with email and Forgot password.
