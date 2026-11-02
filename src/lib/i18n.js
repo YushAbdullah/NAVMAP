@@ -1,5 +1,13 @@
 const STR = {
   en: {
+    aboutTitle: 'About NAVMAP', aboutLink: 'About', aboutCard: 'Who built it, our vision and mission, and why NAVMAP exists.', aboutOpen: 'Read',
+    radioTitle: 'Free radio', radioLead: 'Live Malaysian radio, free. Keeps playing while you drive or browse the map.', radioSearch: 'Search stations',
+    radioLoading: 'Finding stations…', radioFailed: 'Could not load the station list right now.', radioNone: 'No station matches that name.',
+    radioPlay: 'Play', radioPause: 'Pause', radioStop: 'Stop', radioResume: 'Play again', radioLast: 'Last played',
+    radioBuffering: 'Connecting…', radioLive: 'Live', radioPaused: 'Paused', radioErr: 'This station is not playing right now. Try another one.',
+    radioDrive: 'While driving, set your station before you go. Navigation voice turns the radio down when it speaks.',
+    radioSource: 'Station list from Radio Browser (radio-browser.info), a free open directory. Streams come straight from each station; NAVMAP does not host or own them. Uses mobile data (about 30 to 60 MB an hour).',
+    radioCard: 'Free radio', radioCardSub: 'Listen to live Malaysian stations while you drive.',
     gmapsSearch: 'Search on Google Maps', gmapsMore: 'Not listed here?', gmapsPlace: 'Reviews & photos on Google Maps',
     subTitle: 'Get NAVMAP updates', subLead: 'News about new features, safety tips and future NAVMAP campaigns, by email. No spam.', subEmail: 'Email address',
     subConsent: 'I agree that Yush Abdullah (NAVMAP) may store my email address and send me NAVMAP news, updates and future campaigns. I can unsubscribe at any time. See the <a href="/privacy.html" target="_blank">Privacy Policy</a>.',
@@ -127,6 +135,14 @@ const STR = {
     arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', voiceStyle: 'Voice', voiceStd: 'Standard', voiceDialects: 'Malaysian dialects', voiceLangs: 'Other languages', voiceMissing: 'No voice for this on your device yet, so EN/BM is used. Add it in your phone\'s text-to-speech settings.', voiceNote: 'Dialects are read by your device\'s Malay voice. Tap a style to hear a sample.', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
+    aboutTitle: 'Tentang NAVMAP', aboutLink: 'Tentang', aboutCard: 'Siapa yang membinanya, visi dan misi kami, dan mengapa NAVMAP wujud.', aboutOpen: 'Baca',
+    radioTitle: 'Radio percuma', radioLead: 'Radio Malaysia secara langsung, percuma. Terus bermain semasa anda memandu atau melihat peta.', radioSearch: 'Cari stesen',
+    radioLoading: 'Mencari stesen…', radioFailed: 'Senarai stesen tidak dapat dimuatkan sekarang.', radioNone: 'Tiada stesen dengan nama itu.',
+    radioPlay: 'Main', radioPause: 'Jeda', radioStop: 'Henti', radioResume: 'Main semula', radioLast: 'Terakhir didengar',
+    radioBuffering: 'Menyambung…', radioLive: 'Langsung', radioPaused: 'Dijeda', radioErr: 'Stesen ini tidak bermain sekarang. Cuba stesen lain.',
+    radioDrive: 'Semasa memandu, pilih stesen sebelum bertolak. Suara navigasi akan memperlahankan radio ketika bercakap.',
+    radioSource: 'Senarai stesen daripada Radio Browser (radio-browser.info), direktori terbuka percuma. Siaran datang terus daripada setiap stesen; NAVMAP tidak menyimpan atau memilikinya. Menggunakan data mudah alih (kira-kira 30 hingga 60 MB sejam).',
+    radioCard: 'Radio percuma', radioCardSub: 'Dengar stesen radio Malaysia secara langsung semasa memandu.',
     gmapsSearch: 'Cari di Google Maps', gmapsMore: 'Tiada dalam senarai?', gmapsPlace: 'Ulasan & gambar di Google Maps',
     subTitle: 'Dapatkan berita NAVMAP', subLead: 'Berita ciri baharu, tip keselamatan dan kempen NAVMAP akan datang melalui e-mel. Tiada spam.', subEmail: 'Alamat e-mel',
     subConsent: 'Saya bersetuju Yush Abdullah (NAVMAP) menyimpan alamat e-mel saya dan menghantar berita, kemas kini dan kempen NAVMAP akan datang. Saya boleh berhenti melanggan pada bila-bila masa. Lihat <a href="/privacy.html" target="_blank">Dasar Privasi</a>.',

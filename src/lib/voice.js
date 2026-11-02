@@ -54,6 +54,10 @@ export function speak(text, pack, { queue = false, force = false } = {}) {
   const v = findVoice(pack);
   if (v) { u.voice = v; u.lang = v.lang; } else u.lang = pack.tts?.[0] || 'en-MY';
   u.rate = 1;
+  // Lets the radio turn itself down while guidance speaks.
+  const duck = (on) => document.dispatchEvent(new CustomEvent('navmap-voice', { detail: on }));
+  u.onstart = () => duck(true);
+  u.onend = u.onerror = () => duck(false);
   speechSynthesis.speak(u);
 }
 
