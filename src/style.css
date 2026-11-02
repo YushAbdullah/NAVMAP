@@ -808,3 +808,47 @@ button.acard-head { cursor: pointer; }
 .toll-pin b { padding: 1px 4px; border-radius: 4px; background: #F2B705; color: #1A1A1A; font-size: 10px; letter-spacing: .04em; }
 .toll-pin.sel { background: #003503; z-index: 2; }
 body.navigating .toll-pin:not(.sel) { display: none; }
+
+/* ---------- Free radio ---------- */
+.radio-fab { position: relative; }
+.radio-fab .eq { display: none; position: absolute; right: 4px; bottom: 4px; }
+.radio-fab.on { background: var(--primary); color: var(--on-primary); }
+.radio-fab.on .eq { display: flex; }
+.eq { display: flex; align-items: flex-end; gap: 2px; height: 10px; }
+.eq i { width: 2px; height: 100%; border-radius: 1px; background: currentColor; transform-origin: bottom; animation: eq 900ms ease-in-out infinite; }
+.eq i:nth-child(2) { animation-delay: -300ms; }
+.eq i:nth-child(3) { animation-delay: -600ms; }
+@keyframes eq { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .eq i { animation: none; transform: scaleY(.7); } }
+.hud-radio.on { background: var(--primary); color: var(--on-primary); }
+.radio-dlg { width: min(440px, calc(100vw - 32px)); }
+.radio-now { padding: 4px 20px 0; }
+.rn-card { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 16px; background: var(--surface-muted); }
+.rn-card.on { background: var(--surface-tint); }
+.rn-card .mid, .st-main .mid { flex: 1; min-width: 0; }
+.rn-card b, .st-main b { display: block; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rn-card small, .st-main small { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rn-card small.err { color: var(--danger); white-space: normal; }
+.rn-card img, .rn-card .st-ph { width: 48px; height: 48px; border-radius: 12px; }
+.rn-play { width: 52px; height: 52px; flex: none; border: 0; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; }
+.rn-play:disabled { opacity: .4; }
+.rn-play svg { width: 22px; height: 22px; stroke: none; }
+.rn-vol { display: flex; align-items: center; gap: 10px; padding: 10px 4px 4px; color: var(--text-subtle); }
+.rn-vol input { flex: 1; accent-color: var(--accent); }
+.radio-find { padding: 8px 20px 0; }
+.radio-find input { width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font-size: 15px; }
+.radio-body { overflow-y: auto; padding: 0 20px 20px; }
+.radio-body h3 { margin: 14px 0 6px; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--text-subtle); text-transform: uppercase; }
+.radio-body .sm { margin-top: 14px; font-size: 12px; }
+.radio-body .muted .spinner { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; }
+.st-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.st-row { display: flex; align-items: center; gap: 4px; border-radius: 12px; }
+.st-row.on { background: var(--surface-tint); }
+.st-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 8px; border: 0; border-radius: 12px; background: transparent; text-align: left; }
+.st-main .eq { color: var(--success); }
+.st-main img, .st-ph { width: 40px; height: 40px; flex: none; border-radius: 10px; object-fit: contain; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); }
+.st-ph { display: grid; place-items: center; font-weight: 700; color: var(--success); background: var(--surface-tint); }
+.st-fav { width: 44px; height: 44px; flex: none; border: 0; border-radius: 10px; background: transparent; color: var(--text-subtle); display: grid; place-items: center; }
+.st-fav[aria-pressed="true"] { color: #E0A100; }
+.st-fav[aria-pressed="true"] svg { fill: currentColor; }
+.rn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
