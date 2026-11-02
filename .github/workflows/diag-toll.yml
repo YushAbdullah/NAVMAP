@@ -1,13 +1,21 @@
-name: Toll diagnostic (temporary)
+name: Toll data first build (temporary)
 on:
   push:
     branches: [claude/project-thread-za50y5]
-    paths: [scripts/diag-toll.mjs, .github/workflows/diag-toll.yml]
+    paths: [scripts/build-tolls.mjs, .github/workflows/diag-toll.yml]
+permissions:
+  contents: write
 jobs:
-  diag:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-      - run: node scripts/diag-toll.mjs
+      - run: node scripts/build-tolls.mjs
+      - run: |
+          git config user.name "navmap-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/data/tolls.json
+          git commit -m "Add toll expressway points from OpenStreetMap"
+          git push origin HEAD:claude/project-thread-za50y5
