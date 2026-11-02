@@ -5,7 +5,7 @@
 <body>
 <nav class="top"><a href="/">← Back to NAVMAP</a><a href="/terms.html">Terms of Service</a><a href="/privacy.html">Privacy Policy</a></nav>
 <h1>Privacy Policy</h1>
-<p class="meta">Last updated: 1 November 2026 · Effective date: 31 October 2026<br>Operator: Yush Abdullah, Malaysia · Contact: <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a></p>
+<p class="meta">Last updated: 2 November 2026 · Effective date: 31 October 2026<br>Operator: Yush Abdullah, Malaysia · Contact: <a href="mailto:muhdyusry.abdullah@gmail.com">muhdyusry.abdullah@gmail.com</a></p>
 
 <div class="box">
 <b>In short</b>
@@ -64,7 +64,9 @@
 <p><b>Why:</b> to show live weather and hazard reports to other users nearby, and so that only your device can remove your pin. Other users see the pin type, place and time, never who posted it.</p>
 <p><b>How long:</b> each pin deletes itself automatically when it expires, between 1 and 12 hours depending on its type, or earlier if you press <b>Remove pin</b>. When other users tap <b>Still there</b> the pin lives a little longer, but never past a fixed limit for its type (2 hours for traffic, up to 3 days for a landslide). If enough users tap <b>Gone</b>, the pin is deleted early.</p>
 <p><b>Still there / Gone votes:</b> to allow one vote per device on each pin, we store a one-way hash of the pin's id together with your device code, and your choice. Because the pin id is part of the hash, your votes on different pins cannot be linked to each other or to you. Other users only see totals (for example "Confirmed by 3"). Vote records are deleted with the pin. Your browser also remembers which button you pressed so it can show it, on your device only.</p>
-<p><b>Spam protection:</b> to stop abuse we count pins and votes per network for one hour, and votes per network on each pin while that pin is live. For this we store a one-way hash of your IP address, for up to 1 hour (or, for votes on one pin, until that pin expires). We cannot turn the hash back into your IP address.</p>
+<p><b>Updates and questions on a pin:</b> you can add a short public update (up to 200 characters, and an optional status such as "Road closed" or "All clear") to any pin, or post a question for people nearby. Others see the text, the status, the time and an <b>anonymous nickname</b> such as "Kancil 42". The nickname is made from a one-way hash of your device code, so the same device gets the same nickname, but it contains no name, phone number or account. Please do not write personal details: links and phone numbers are refused, and some offensive words are masked. We store the text, status, time, nickname and a one-way hash of your device code (so only you can delete it). Updates are deleted together with their pin, and you can delete your own update any time.</p>
+<p><b>Helpful and Report:</b> when you tap Helpful or Report on an update, we store a one-way hash of the update id together with your device code, so each device counts once. If several people report an update, it is hidden automatically. These records are deleted with the pin.</p>
+<p><b>Spam protection:</b> to stop abuse we count pins, votes, updates and Helpful/Report taps per network for one hour (updates also per device), and votes per network on each pin while that pin is live. For this we store a one-way hash of your IP address, for up to 1 hour (or, for votes on one pin, until that pin expires). We cannot turn the hash back into your IP address.</p>
 
 <h3>2.8 SOS emergency calls</h3>
 <p>Tapping a number in the SOS window hands the call to your phone's own dialler or to WhatsApp. <b>We do not see, record or receive</b> who you call or when. The "Copy" button copies your coordinates to your own clipboard only.</p>

@@ -17,7 +17,8 @@ import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil
 import { speak, setVoice, voiceOn, voiceSupported, activePack, getVoicePack, setVoicePack, findVoice, voicesLoaded } from './lib/voice.js';
 import { VOICE_PACKS } from './lib/voice-packs.js';
 import { PIN_TYPES } from './lib/pin-types.js';
-import { listPins, addPin, removePin, votePin } from './lib/pins.js';
+import { listPins, addPin, removePin, votePin, getThread, postComment, reactComment, deleteComment } from './lib/pins.js';
+import { TAGS, TAG_BY_ID, MAX_TEXT } from './lib/community.js';
 import { applyPlay, PLAY_PITCH } from './lib/play.js';
 import { award, getScore, levelOf, LEVEL_PTS, BADGES } from './lib/score.js';
 import * as pinsMod from './lib/pins.js';
@@ -50,6 +51,7 @@ const S = {
   fuel: null,               // pump prices { ron95, budi95, ron97, diesel, date, live }
   alerts: [], alertMode: 'loading', alertsAt: null, alertFilter: 'all',
   reports: [],
+  thread: null,             // { pinId, status: 'loading'|'ok'|'error'|'gone', comments, tag, draft, sending } while a pin's updates are open
   wx: null, wxStatus: 'idle', wxPlace: '', radar: false,
   news: [], newsStatus: 'idle', newsAt: 0, newsRegion: 'all', newsTopic: 'all',
   me: null,                 // [lon, lat]
@@ -410,7 +412,7 @@ function alertPopup(a) {
   popup?.remove();
   popup = new maplibregl.Popup({ offset: 14, maxWidth: '260px' })
     .setLngLat([a.lon, a.lat])
-    .setHTML(`<b>${esc(L(a, 'title'))}</b>${a.place ? `${esc(a.place)}<br>` : ''}${esc(L(a, 'desc'))}<br><small>${esc(a.source)} · ${esc(fmtAgo(a.time, getLang()))}</small>${a.kind === 'report' ? `<small class="pin-trust">${esc(pinTrust(a, getLang()))}</small>${voteBtns(a)}` : ''}${a.mine ? `<button class="unpin" data-unpin="${esc(a.pinId)}">${icon('close')}${t('unpin')}</button>` : ''}`)
+    .setHTML(`<b>${esc(L(a, 'title'))}</b>${a.place ? `${esc(a.place)}<br>` : ''}${esc(L(a, 'desc'))}<br><small>${esc(a.source)} · ${esc(fmtAgo(a.time, getLang()))}</small>${a.kind === 'report' ? `<small class="pin-trust">${esc(pinTrust(a, getLang()))}</small>${voteBtns(a)}${talkBtn(a)}` : ''}${a.mine ? `<button class="unpin" data-unpin="${esc(a.pinId)}">${icon('close')}${t('unpin')}</button>` : ''}`)
     .addTo(map);
 }
 
@@ -1098,10 +1100,13 @@ function render() {
     if (b.dataset.tab === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   const body = $('#sheet-body');
+  const ae = document.activeElement;
+  const keep = ae?.id === 'cm-text' ? [ae.selectionStart, ae.selectionEnd] : null; // a refresh must not kick someone out of typing
   body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : S.tab === 'news' ? viewNews() : (S.selected ? viewPlace() : viewExplore());
   body.insertAdjacentHTML('beforeend', `${statsLine()}<p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`);
   syncLayout();
   if (S.tab === 'drive' && S.ptEdit) $('#pt-q')?.focus({ preventScroll: true });
+  if (keep && $('#cm-text')) { const el = $('#cm-text'); el.focus({ preventScroll: true }); el.setSelectionRange(...keep); }
 }
 
 function placeRow(p) {
@@ -1648,7 +1653,9 @@ function viewAlerts() {
     return `<button class="chip" data-filter="${k}" aria-pressed="${S.alertFilter === k}">${t(label)} ${n}</button>`;
   }).join('')}</div>`;
   const head = `<div class="sh-head"><h2>${t('alertsTitle')}</h2><small style="color:var(--text-subtle);font-size:12px">${S.alertsAt ? `${t('updated')} ${fmtAgo(S.alertsAt, lang)}` : ''}</small></div>`;
-  if (S.alertMode === 'loading') return `${head}<div class="empty-state"><span class="spinner"></span></div>`;
+  if (S.thread) return viewThread(lang, ref);
+  if (S.alertMode === 'loading' && S.alertFilter !== 'report') return `${head}<div class="empty-state"><span class="spinner"></span></div>`;
+  if (S.alertFilter === 'report') return `${head}${filters}${viewCommunity(lang, ref)}<p class="source">${t('sourceNote')}</p>`;
   const sample = S.alertMode === 'sample' ? `<div class="note">${icon('accident')}<span>${t('sample')}</span></div>` : '';
   const rows = list.length ? `<ul class="alist">${list.slice(0, 150).map((a) => alertCard(a, ref, lang)).join('')}</ul>` : `<div class="empty-state">${icon('weather')}${t('noAlerts')}</div>`;
   return `${head}${sample}${filters}${rows}<p class="source">${t('sourceNote')}</p>`;
@@ -1681,12 +1688,196 @@ function alertCard(a, ref, lang) {
   const headEl = a.lat != null
     ? `<button class="acard-head" data-alert="${esc(a.id)}" aria-label="${t('showOnMap')}: ${esc(L(a, 'title'))}">${main}</button>`
     : `<div class="acard-head">${main}</div>`;
-  const trust = a.kind === 'report' ? `<div class="acard-meta"><small class="pin-trust">${esc(pinTrust(a, lang))}</small>${voteBtns(a)}</div>` : '';
+  const trust = a.kind === 'report' ? `<div class="acard-meta"><small class="pin-trust">${esc(pinTrust(a, lang))}</small>${voteBtns(a)}${talkBtn(a)}</div>` : '';
   const meta = (chips || until) ? `<div class="acard-meta">${chips ? `<div class="tags">${chips}</div>` : ''}${until ? `<span class="until">${icon('clock')}${t('until')} ${esc(until)}</span>` : ''}</div>` : '';
   const details = long ? `<details class="acard-more"><summary><span class="open">${t('showDetails')}</span><span class="shut">${t('hideDetails')}</span></summary>
       <div class="atext">${alertTextHtml(desc, esc)}${instr ? `<p class="instr">${esc(instr)}</p>` : ''}</div></details>` : '';
   return `<li class="acard ${sev}">${headEl}${meta}${trust}${details}<small class="asrc">${esc(a.source)}</small></li>`;
 }
+
+// ---------------------------------------------------------------- community conversation
+// Every community pin has a short thread of updates: one-tap status tags ("Getting worse",
+// "Road closed", "All clear") and a line of text. The Community filter in Alerts is a live feed
+// ordered by the latest activity. Nicknames are anonymous; see src/lib/community.js and api/pins.js.
+const canTalk = (a) => a.kind === 'report' && !!pinsMod.shared && !String(a.pinId).startsWith('l');
+function talkBtn(a) {
+  if (!canTalk(a) || S.thread) return '';
+  const n = a.comments || 0;
+  return `<button type="button" class="talk" data-action="thread" data-pin="${esc(a.pinId)}">${icon('chat')}${n ? esc(updatesLabel(n)) : t('commJoin')}</button>`;
+}
+const updatesLabel = (n) => (n === 1 ? t('commUpdate1') : t('commUpdates').replace('{n}', n));
+const tagLabel = (id) => { const x = TAG_BY_ID[id]; return x ? (getLang() === 'bm' ? x.bm : x.en) : ''; };
+const tagChip = (id) => (TAG_BY_ID[id] ? `<span class="ctag ${TAG_BY_ID[id].tone}">${esc(tagLabel(id))}</span>` : '');
+const handleHue = (h) => [...String(h)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
+const avatar = (h) => `<span class="av" style="--h:${handleHue(h)}" aria-hidden="true">${esc(String(h || '?')[0])}</span>`;
+const pinTitle = (a) => (a.type === 'ask' && a.note ? `“${a.note}”` : L(a, 'title'));
+
+function viewCommunity(lang, ref) {
+  const list = S.reports.filter((a) => a.kind === 'report')
+    .sort((x, y) => new Date(y.lastActivityAt || y.time) - new Date(x.lastActivityAt || x.time));
+  const live = pinsMod.shared ? `<span class="live-dot">${t('commLive')}</span>` : `<span class="live-dot off">${t('deviceOnly')}</span>`;
+  const top = `<div class="comm-top"><div><h3>${t('commTitle')}</h3><p class="muted">${t('commLead')}</p></div>${live}</div>
+    <div class="comm-cta"><button class="btn" data-action="comm-post">${icon('pin')}${t('commPost')}</button><button class="btn-ghost" data-action="comm-ask">${icon('chat')}${t('commAsk')}</button></div>`;
+  if (!list.length) return `${top}<div class="empty-state">${icon('users')}${t('commEmpty')}</div>`;
+  return `${top}<ul class="alist">${list.slice(0, 100).map((a) => commCard(a, ref, lang)).join('')}</ul>`;
+}
+
+function commCard(a, ref, lang) {
+  const sev = a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info';
+  const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
+  const last = a.last;
+  const lastLine = last
+    ? `<span class="last">${avatar(last.handle)}<span><b>${esc(last.handle)}</b> ${tagChip(last.tag)} ${esc(last.text || '')}<small> · ${esc(fmtAgo(last.at, lang))}</small></span></span>`
+    : `<span class="last none">${t('commNone')}</span>`;
+  const sub = a.type === 'ask' ? L(a, 'title') : (a.note ? a.note : '');
+  return `<li class="acard ccard ${sev}">
+    <button class="acard-head" data-action="thread" data-pin="${esc(a.pinId)}">
+      <span class="ic ${sev}">${icon(a.icon || 'report')}</span>
+      <span class="mid"><span class="acard-top"><span class="ago">${t('commPinnedBy').replace('{t}', esc(fmtAgo(a.time, lang)))}</span>${d != null ? `<span class="ago"><b>${fmtDist(d)}</b></span>` : ''}</span>
+        <b>${esc(pinTitle(a))}</b>${sub ? `<span class="sum">${esc(sub)}</span>` : ''}${lastLine}</span>
+    </button>
+    <div class="acard-meta"><small class="pin-trust">${esc(pinTrust(a, lang))}</small>${canTalk(a) ? `<button type="button" class="talk" data-action="thread" data-pin="${esc(a.pinId)}">${icon('chat')}${a.comments ? esc(updatesLabel(a.comments)) : t('commJoin')}</button>` : ''}</div>
+  </li>`;
+}
+
+function viewThread(lang, ref) {
+  const th = S.thread;
+  const a = S.reports.find((r) => r.pinId === th.pinId) || th.alert;
+  const back = `<div class="th-head"><button class="link back" data-action="thread-back">${icon('back')}${t('commBack')}</button><span class="live-dot">${t('commLive')}</span></div>`;
+  if (!a || th.status === 'gone') return `${back}<div class="empty-state">${icon('clock')}${t('commGone')}</div>`;
+  const card = `<ul class="alist">${alertCard({ ...a, title: pinTitle(a), title_bm: pinTitle(a), ...(a.note && a.type !== 'ask' ? { desc: a.note, desc_bm: a.note } : {}) }, ref, lang)}</ul>`;
+  const tags = TAGS.map((x) => `<button type="button" class="ctag-btn ${x.tone}" data-action="cm-tag" data-tag="${x.id}" aria-pressed="${th.tag === x.id}">${esc(lang === 'bm' ? x.bm : x.en)}</button>`).join('');
+  const len = (th.draft || '').length;
+  const composer = `<form id="cm-form" class="composer" autocomplete="off">
+      <span class="cm-label">${t('commTagHint')}</span>
+      <div class="cm-tags" role="group" aria-label="${t('commTagHint')}">${tags}</div>
+      <textarea id="cm-text" rows="2" maxlength="${MAX_TEXT}" placeholder="${esc(t('commPlaceholder'))}" aria-label="${esc(t('commPlaceholder'))}">${esc(th.draft || '')}</textarea>
+      <div class="cm-row"><small class="cm-rules">${t('commRules')}</small><span class="cm-count" id="cm-count">${len}/${MAX_TEXT}</span>
+      <button class="btn sm" type="submit"${th.sending ? ' disabled' : ''}>${th.sending ? '<span class="spinner"></span>' : icon('nav')}${t('commSend')}</button></div>
+    </form>`;
+  return `${back}${card}${composer}<div id="thread-list">${threadList(lang)}</div>`;
+}
+
+function threadList(lang) {
+  const th = S.thread;
+  if (th.status === 'loading' && !th.comments) return `<div class="empty-state"><span class="spinner"></span>${t('commLoading')}</div>`;
+  if (th.status === 'error' && !th.comments) return `<div class="empty-state">${t('commNeedsShared')}<button class="btn-ghost" data-action="thread-retry">${t('retry')}</button></div>`;
+  const list = [...(th.comments || [])].reverse(); // newest first: the latest news matters most
+  if (!list.length) return `<p class="muted cm-none">${t('commNone')}</p>`;
+  return `<h3 class="cm-h">${esc(updatesLabel(list.length))}</h3><ul class="clist">${list.map((c) => `<li class="cm">
+      ${avatar(c.handle)}
+      <div class="cm-body">
+        <div class="cm-top"><b>${esc(c.handle)}</b>${c.byPinner ? `<span class="cm-badge">${t('commPinner')}</span>` : ''}${c.mine ? `<span class="cm-badge you">${t('commYou')}</span>` : ''}<small>${esc(fmtAgo(c.at, lang))}</small></div>
+        ${c.tag ? tagChip(c.tag) : ''}${c.text ? `<p>${esc(c.text)}</p>` : ''}
+        <div class="cm-acts">
+          ${c.mine ? (c.helpful ? `<span class="cm-help-n">${icon('heart')}${c.helpful}</span>` : '')
+            : `<button type="button" data-action="cm-helpful" data-cid="${esc(c.id)}" aria-pressed="${!!c.helpedByMe}">${icon('heart')}${t('commHelpful')}${c.helpful ? ` ${c.helpful}` : ''}</button>`}
+          ${c.mine ? `<button type="button" data-action="cm-del" data-cid="${esc(c.id)}">${t('commDelete')}</button>`
+            : `<button type="button" class="quiet" data-action="cm-flag" data-cid="${esc(c.id)}">${t('commReport')}</button>`}
+        </div>
+      </div></li>`).join('')}</ul>`;
+}
+
+function openThread(pinId) {
+  popup?.remove();
+  const a = S.reports.find((r) => r.pinId === pinId);
+  S.thread = { pinId, status: 'loading', comments: null, tag: null, draft: '', alert: a };
+  if (S.tab !== 'alerts') { openSheet(); setTab('alerts'); } else render();
+  if (sheetState !== 'full') setSheet('full');
+  $('#sheet-body').scrollTop = 0;
+  if (a?.lat != null) map.flyTo({ center: [a.lon, a.lat], zoom: Math.max(map.getZoom(), 14), padding: mapPadding() });
+  loadThread();
+}
+
+async function loadThread() {
+  const th = S.thread;
+  if (!th) return;
+  try {
+    const out = await getThread(th.pinId);
+    if (S.thread !== th) return;
+    th.comments = out.comments; th.status = 'ok'; th.alert = out.alert;
+    S.reports = S.reports.map((r) => (r.pinId === th.pinId ? out.alert : r));
+  } catch (err) {
+    if (S.thread !== th) return;
+    th.status = err.message === 'gone' ? 'gone' : 'error';
+    if (th.status === 'gone') { S.reports = S.reports.filter((r) => r.pinId !== th.pinId); drawAlerts(); }
+  }
+  if (S.tab === 'alerts') {
+    // only the list changes on a refresh, so someone typing is not disturbed
+    const box = $('#thread-list');
+    if (box && th.status !== 'gone') box.innerHTML = threadList(getLang()); else render();
+  }
+}
+setInterval(() => { if (S.thread && S.tab === 'alerts' && document.visibilityState === 'visible') loadThread(); }, 15e3);
+
+async function sendComment() {
+  const th = S.thread;
+  if (!th || th.sending) return;
+  const text = ($('#cm-text')?.value || '').trim();
+  if (!text && !th.tag) { toast(t('commEmptyErr')); $('#cm-text')?.focus(); return; }
+  th.sending = true; th.draft = text; render();
+  try {
+    const out = await postComment(th.pinId, { text, tag: th.tag });
+    if (out.removed) {
+      S.reports = S.reports.filter((r) => r.pinId !== th.pinId);
+      S.thread = null; toast(t('commCleared'));
+      drawAlerts(); renderBanner(); rescanRoutes(); render();
+      return;
+    }
+    th.draft = ''; th.tag = null;
+    if (out.alert) S.reports = S.reports.map((r) => (r.pinId === th.pinId ? out.alert : r));
+    if (out.comment) th.comments = [...(th.comments || []), out.comment];
+    toast(t('commPosted'));
+    drawAlerts();
+  } catch (err) {
+    const m = { rate: 'commRate', slow: 'commSlow', link: 'commLink', phone: 'commPhone', long: 'commLong', empty: 'commEmptyErr', gone: 'commGone' }[err.message];
+    toast(t(m || 'commFailed'));
+    if (err.message === 'gone') th.status = 'gone';
+  }
+  th.sending = false;
+  if (S.thread === th) render();
+}
+
+async function onCommentAction(act, cid) {
+  const th = S.thread;
+  if (!th) return;
+  const c = (th.comments || []).find((x) => x.id === cid);
+  try {
+    if (act === 'cm-helpful') {
+      const d = await reactComment(th.pinId, cid, 'helpful');
+      if (d.comment && c) Object.assign(c, { helpful: d.comment.helpful, helpedByMe: d.comment.helpedByMe });
+    } else if (act === 'cm-flag') {
+      if (!confirm(t('commReportQ'))) return;
+      const d = await reactComment(th.pinId, cid, 'flag');
+      if (d.hidden) th.comments = th.comments.filter((x) => x.id !== cid);
+      toast(t('commReported'));
+    } else if (act === 'cm-del') {
+      await deleteComment(th.pinId, cid);
+      th.comments = th.comments.filter((x) => x.id !== cid);
+      toast(t('commDeleted'));
+    }
+  } catch (err) {
+    toast(t(err.message === 'rate' ? 'commRate' : 'commFailed'));
+  }
+  const box = $('#thread-list');
+  if (box) box.innerHTML = threadList(getLang());
+}
+
+document.addEventListener('submit', (e) => {
+  if (e.target.id !== 'cm-form') return;
+  e.preventDefault();
+  sendComment();
+});
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'cm-text' || !S.thread) return;
+  S.thread.draft = e.target.value;
+  const n = $('#cm-count');
+  if (n) n.textContent = `${e.target.value.length}/${MAX_TEXT}`;
+});
+document.addEventListener('keydown', (e) => {
+  // Enter posts, Shift+Enter adds a new line
+  if (e.target.id === 'cm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendComment(); }
+});
 
 // ---------------------------------------------------------------- live news (environment & nature)
 async function loadNews(force = false) {
@@ -1900,7 +2091,7 @@ document.addEventListener('click', (e) => {
   if (el.dataset.cat) { loadPlaces(S.cat === el.dataset.cat && S.tab === 'explore' ? null : el.dataset.cat); return; }
   if (el.dataset.newsRegion) { S.newsRegion = el.dataset.newsRegion; render(); return; }
   if (el.dataset.newsTopic) { S.newsTopic = el.dataset.newsTopic; render(); return; }
-  if (el.dataset.filter) { S.alertFilter = el.dataset.filter; render(); return; }
+  if (el.dataset.filter) { S.alertFilter = el.dataset.filter; S.thread = null; render(); return; }
   if (el.dataset.route) { S.routeIdx = Number(el.dataset.route); drawRoutes(); render(); return; }
   if (el.dataset.alert) {
     const a = allAlerts().find((x) => x.id === el.dataset.alert);
@@ -1936,6 +2127,18 @@ document.addEventListener('click', (e) => {
   if (act === 'ride') bookRide(el.dataset.app);
   if (act === 'leave-now') { S.leaveAt = ''; if (S.dest) computeRoute(); }
   if (act === 'pin-weather') openPinDialog();
+  if (act === 'thread') { openThread(el.dataset.pin); return; }
+  if (act === 'thread-back') { S.thread = null; S.alertFilter = 'report'; render(); return; }
+  if (act === 'thread-retry' && S.thread) { S.thread.status = 'loading'; render(); loadThread(); }
+  if (act === 'cm-tag' && S.thread) {
+    S.thread.tag = S.thread.tag === el.dataset.tag ? null : el.dataset.tag;
+    S.thread.draft = $('#cm-text')?.value ?? S.thread.draft;
+    document.querySelectorAll('.ctag-btn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tag === S.thread.tag)));
+    return;
+  }
+  if (act === 'cm-helpful' || act === 'cm-flag' || act === 'cm-del') { onCommentAction(act, el.dataset.cid); return; }
+  if (act === 'comm-post') openPinDialog();
+  if (act === 'comm-ask') openPinDialog('ask');
   if (act === 'radar') toggleRadar();
   if (act === 'wx-retry') loadWeather(true);
   if (act === 'news-retry') loadNews(true);
@@ -2110,26 +2313,37 @@ window.addEventListener('resize', () => { if (!layersPop.hidden) placeLayersPop(
 const dlg = $('#report-dlg');
 function renderReportGrid() {
   $('#report-grid').innerHTML = PIN_TYPES.map((r) =>
-    `<button type="button" data-report="${r.id}" class="sev-${r.sev}">${icon(r.icon)}${esc(getLang() === 'bm' ? r.bm : r.en)}</button>`).join('');
+    `<button type="button" data-report="${r.id}" class="sev-${r.sev}${r.id === 'ask' ? ' ask' : ''}">${icon(r.icon)}${esc(r.id === 'ask' ? t('commAsk') : getLang() === 'bm' ? r.bm : r.en)}</button>`).join('');
 }
-function openPinDialog() { renderReportGrid(); dlg.showModal(); }
-$('#report-btn').addEventListener('click', openPinDialog);
+function openPinDialog(focus) {
+  renderReportGrid();
+  const note = $('#report-note');
+  note.value = ''; note.placeholder = t(focus === 'ask' ? 'commPlaceholder' : 'reportNotePh');
+  dlg.showModal();
+  if (focus === 'ask') note.focus();
+}
+$('#report-btn').addEventListener('click', () => openPinDialog());
+$('#report-note').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); }); // Enter must not close the dialog
 $('#report-grid').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-report]');
   if (!b) return;
   // pin where the person is if they're looking near themselves, otherwise at the map centre
   const c = S.me && distKm(S.me, center()) < 1 ? S.me : center();
+  const note = $('#report-note').value.trim();
+  if (b.dataset.report === 'ask' && !note) { toast(t('askNeedsNote')); $('#report-note').focus(); return; }
   dlg.close();
   try {
-    const r = await addPin(b.dataset.report, c[1], c[0]);
+    const r = await addPin(b.dataset.report, c[1], c[0], note);
     S.reports = [...S.reports.filter((x) => x.id !== r.id), r];
     rescanRoutes();
     drawAlerts(); renderBanner(); render();
     toast(r.merged ? t('pinMerged') : pinsMod.shared ? t('pinnedShared') : t('pinnedLocal'));
+    if (r.type === 'ask' && canTalk(r)) openThread(r.pinId);
     const g = award('pin');
     if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 2400);
   } catch (err) {
-    toast(err.message === 'rate' ? t('pinRate') : t('pinFailed'));
+    const m = { rate: 'pinRate', link: 'commLink', phone: 'commPhone', long: 'commLong', empty: 'askNeedsNote' }[err.message];
+    toast(t(m || 'pinFailed'));
   }
 });
 $('#wx-btn').addEventListener('click', () => { openSheet(); setTab('weather'); });

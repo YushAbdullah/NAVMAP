@@ -136,6 +136,8 @@
       <form method="dialog" id="report-form">
         <h2 id="report-title" data-i18n="reportTitle">What's happening here?</h2>
         <p class="muted" data-i18n="reportHint">Your pin is shown to everyone nearby. You can remove it any time.</p>
+        <label class="report-note"><span data-i18n="reportNote">Add a detail (optional)</span>
+          <input id="report-note" type="text" maxlength="200" autocomplete="off" placeholder="e.g. left lane blocked, water rising" data-i18n-ph="reportNotePh"></label>
         <div class="report-grid" id="report-grid"></div>
         <div class="row-end">
           <button value="cancel" class="btn-ghost" data-i18n="cancel">Cancel</button>

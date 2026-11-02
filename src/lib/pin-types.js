@@ -2,6 +2,7 @@
 // hours    = how long a new pin stays before it expires automatically.
 // maxHours = the longest a pin can live when other people keep confirming it ("Still there").
 //            Each confirmation pushes the expiry to now + hours, never past createdAt + maxHours.
+// needsNote = the pin is a question, so it must come with a short note.
 // Short-lived things (traffic, rain) expire fast; slow ones (flood, landslide, haze) last longer.
 export const PIN_TYPES = [
   { id: 'rain', en: 'Raining', bm: 'Hujan', sev: 'info', hours: 1.5, maxHours: 3, icon: 'rain' },
@@ -16,5 +17,6 @@ export const PIN_TYPES = [
   { id: 'clear', en: 'Clear now', bm: 'Cerah sekarang', sev: 'info', hours: 1, maxHours: 2, icon: 'partly' },
   { id: 'accident', en: 'Accident', bm: 'Kemalangan', sev: 'danger', hours: 1, maxHours: 3, icon: 'accident' },
   { id: 'jam', en: 'Heavy traffic', bm: 'Kesesakan', sev: 'warning', hours: 0.75, maxHours: 2, icon: 'jam' },
+  { id: 'ask', en: 'Question', bm: 'Soalan', sev: 'info', hours: 2, maxHours: 6, icon: 'chat', needsNote: true },
 ];
 export const PIN_BY_ID = Object.fromEntries(PIN_TYPES.map((p) => [p.id, p]));
