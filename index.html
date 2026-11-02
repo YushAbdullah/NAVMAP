@@ -218,6 +218,20 @@
       <div id="about-body" class="about-body"></div>
     </dialog>
 
+    <!-- First-visit welcome: what NAVMAP is and why it exists (src/lib/onboarding.js) -->
+    <dialog id="welcome-dlg" class="welcome-dlg" aria-labelledby="welcome-title">
+      <div class="wl-top">
+        <button class="wl-lang" id="wl-lang" type="button" aria-label="Language"></button>
+        <button class="linkish wl-skip" id="wl-skip" type="button"></button>
+      </div>
+      <div id="welcome-body"></div>
+      <div class="wl-foot">
+        <button class="btn-ghost" id="wl-back" type="button"></button>
+        <div class="wl-dots" id="wl-dots" aria-hidden="true"></div>
+        <button class="btn" id="wl-next" type="button"></button>
+      </div>
+    </dialog>
+
     <div class="toast" id="toast" role="status" hidden></div>
   </div>
   <script type="module" src="/src/main.js"></script>

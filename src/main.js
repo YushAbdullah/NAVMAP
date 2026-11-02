@@ -29,6 +29,7 @@ import { LOGO_CATS, logoUrl } from './lib/brands.js';
 import { fetchWeather, wmo, aqiLabel, AQ_LEVELS, placeName, radarFrames } from './lib/weather.js';
 import { HOTLINE_GROUPS } from './lib/hotlines.js';
 import { aboutHtml } from './lib/about.js';
+import { welcomeHtml, welcomeText, welcomed, markWelcomed } from './lib/onboarding.js';
 import * as radio from './lib/radio.js';
 
 const MAP_STYLE = import.meta.env.VITE_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
@@ -2776,7 +2777,7 @@ sosDlg.addEventListener('click', async (e) => {
 // ---------------------------------------------------------------- About NAVMAP
 const aboutDlg = $('#about-dlg');
 function openAbout() {
-  $('#about-body').innerHTML = `${aboutHtml(getLang())}${footer()}`;
+  $('#about-body').innerHTML = `<button class="btn-ghost ab-tour" data-action="tour">${icon('info')}${t('aboutTour')}</button>${aboutHtml(getLang())}${footer()}`;
   $('#about-body').scrollTop = 0;
   if (!aboutDlg.open) aboutDlg.showModal();
 }
@@ -2785,8 +2786,76 @@ aboutDlg.addEventListener('click', (e) => {
   if (e.target === aboutDlg) { aboutDlg.close(); return; }
   const a = e.target.closest('[data-action]')?.dataset.action;
   if (a === 'subscribe') { aboutDlg.close(); openSubscribe(); }
+  if (a === 'tour') { aboutDlg.close(); openWelcome(); }
 });
 aboutDlg.addEventListener('close', () => { if (location.hash === '#about') history.replaceState(null, '', location.pathname + location.search); });
+
+// ---------------------------------------------------------------- First-visit welcome
+// A few swipeable cards on what NAVMAP is and why it exists. Shown once per device, then from
+// About NAVMAP ("Quick tour") or #welcome. Never opens over another dialog (e.g. Community join).
+const welcomeDlg = $('#welcome-dlg');
+let installEvt = null;
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
+addEventListener('appinstalled', () => { installEvt = null; });
+let wlIdx = 0;
+const wlTrack = () => $('#wl-track');
+const wlCount = () => welcomeText(getLang()).cards.length;
+function wlSync() {
+  const w = welcomeText(getLang()), n = wlCount();
+  $('#wl-lang').textContent = getLang() === 'en' ? 'BM' : 'EN';
+  $('#wl-lang').setAttribute('aria-label', getLang() === 'en' ? 'Tukar ke Bahasa Melayu' : 'Switch to English');
+  $('#wl-skip').textContent = w.skip;
+  $('#wl-skip').hidden = wlIdx === n - 1;
+  $('#wl-back').textContent = w.back;
+  $('#wl-back').hidden = wlIdx === 0;
+  $('#wl-next').textContent = wlIdx === n - 1 ? w.start : w.next;
+  $('#wl-dots').innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i === wlIdx ? 'on' : ''}"></i>`).join('');
+}
+function wlGo(i, smooth = true) {
+  wlIdx = Math.max(0, Math.min(wlCount() - 1, i));
+  const tr = wlTrack();
+  tr.scrollTo({ left: wlIdx * tr.clientWidth, behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto' });
+  wlSync();
+}
+function wlRender() {
+  $('#welcome-body').innerHTML = welcomeHtml(getLang(), { canInstall: !!installEvt });
+  let raf = 0;
+  wlTrack().addEventListener('scroll', () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const tr = wlTrack(); if (!tr) return;
+      const i = Math.round(tr.scrollLeft / Math.max(1, tr.clientWidth));
+      if (i !== wlIdx) { wlIdx = i; wlSync(); }
+    });
+  }, { passive: true });
+  requestAnimationFrame(() => wlGo(wlIdx, false));
+}
+function openWelcome() {
+  if (document.querySelector('dialog[open]:not(#welcome-dlg)')) return;
+  wlIdx = 0;
+  wlRender();
+  if (!welcomeDlg.open) welcomeDlg.showModal();
+  $('#wl-next').focus({ focusVisible: false });
+}
+$('#wl-next').addEventListener('click', () => (wlIdx >= wlCount() - 1 ? welcomeDlg.close() : wlGo(wlIdx + 1)));
+$('#wl-back').addEventListener('click', () => wlGo(wlIdx - 1));
+$('#wl-skip').addEventListener('click', () => welcomeDlg.close());
+$('#wl-lang').addEventListener('click', () => { $('#lang-btn').click(); wlRender(); });
+welcomeDlg.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') { e.preventDefault(); wlGo(wlIdx + 1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); wlGo(wlIdx - 1); }
+});
+welcomeDlg.addEventListener('click', async (e) => {
+  if (e.target.closest('[data-wl="install"]') && installEvt) {
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch { /* ignore */ }
+    installEvt = null; wlRender();
+  }
+});
+welcomeDlg.addEventListener('close', () => {
+  markWelcomed();
+  if (location.hash === '#welcome') history.replaceState(null, '', location.pathname + location.search);
+});
 
 // ---------------------------------------------------------------- boot
 applyStatic();
@@ -2805,6 +2874,11 @@ setTimeout(() => loadWeather(), 1200);
 // deep link: #about opens About NAVMAP
 if (location.hash === '#about') openAbout();
 addEventListener('hashchange', () => { if (location.hash === '#about') openAbout(); });
+
+// first visit: the welcome cards (skipped on deep links; #welcome reopens them)
+if (location.hash === '#welcome') openWelcome();
+else if (!welcomed() && !location.hash && !new URLSearchParams(location.search).has('cat')) setTimeout(openWelcome, 500);
+addEventListener('hashchange', () => { if (location.hash === '#welcome') openWelcome(); });
 
 // deep link: ?cat=ev
 const urlCat = new URLSearchParams(location.search).get('cat');
