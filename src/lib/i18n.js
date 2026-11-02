@@ -1,6 +1,10 @@
 const STR = {
   en: {
     aboutTitle: 'About NAVMAP', aboutLink: 'About', aboutCard: 'Who built it, our vision and mission, and why NAVMAP exists.', aboutOpen: 'Read',
+    radioTitle: 'Radio', radioSearch: 'Search stations', radioLive: 'Live', radioConnecting: 'Connecting…', radioPaused: 'Stopped', radioPick: 'Pick a station below', radioError: 'This station is not playing right now. Try another one.',
+    radioPlay: 'Play radio', radioStop: 'Stop radio', radioVolume: 'Radio volume', radioFav: 'Favourite', radioFavs: 'Favourites', radioRtm: 'RTM stations', radioPopular: 'Popular in Malaysia',
+    radioLoading: 'Loading stations…', radioListFailed: 'Could not load the station list. Check your connection and try again.', radioNone: 'No station matches that search.',
+    radioNote: 'Free to listen. Each station plays from its own public stream, found through the free Radio Browser directory; NAVMAP does not host or record any audio. Radio uses mobile data (about 0.5 to 1 MB a minute). The radio turns down while voice directions speak. Choose your station before you drive.',
     gmapsSearch: 'Search on Google Maps', gmapsMore: 'Not listed here?', gmapsPlace: 'Reviews & photos on Google Maps',
     subTitle: 'Get NAVMAP updates', subLead: 'News about new features, safety tips and future NAVMAP campaigns, by email. No spam.', subEmail: 'Email address',
     subConsent: 'I agree that Yush Abdullah (NAVMAP) may store my email address and send me NAVMAP news, updates and future campaigns. I can unsubscribe at any time. See the <a href="/privacy.html" target="_blank">Privacy Policy</a>.',
@@ -129,6 +133,10 @@ const STR = {
   },
   bm: {
     aboutTitle: 'Tentang NAVMAP', aboutLink: 'Tentang', aboutCard: 'Siapa yang membinanya, visi dan misi kami, dan mengapa NAVMAP wujud.', aboutOpen: 'Baca',
+    radioTitle: 'Radio', radioSearch: 'Cari stesen', radioLive: 'Siaran langsung', radioConnecting: 'Menyambung…', radioPaused: 'Berhenti', radioPick: 'Pilih stesen di bawah', radioError: 'Stesen ini tidak dapat dimainkan sekarang. Cuba stesen lain.',
+    radioPlay: 'Main radio', radioStop: 'Henti radio', radioVolume: 'Kelantangan radio', radioFav: 'Kegemaran', radioFavs: 'Kegemaran', radioRtm: 'Stesen RTM', radioPopular: 'Popular di Malaysia',
+    radioLoading: 'Memuatkan stesen…', radioListFailed: 'Senarai stesen tidak dapat dimuatkan. Semak sambungan dan cuba lagi.', radioNone: 'Tiada stesen sepadan dengan carian itu.',
+    radioNote: 'Percuma untuk didengar. Setiap stesen dimainkan dari siaran awamnya sendiri, dicari melalui direktori percuma Radio Browser; NAVMAP tidak menyimpan atau merakam audio. Radio menggunakan data mudah alih (kira-kira 0.5 hingga 1 MB seminit). Radio diperlahankan semasa suara memberi arah. Pilih stesen sebelum memandu.',
     gmapsSearch: 'Cari di Google Maps', gmapsMore: 'Tiada dalam senarai?', gmapsPlace: 'Ulasan & gambar di Google Maps',
     subTitle: 'Dapatkan berita NAVMAP', subLead: 'Berita ciri baharu, tip keselamatan dan kempen NAVMAP akan datang melalui e-mel. Tiada spam.', subEmail: 'Alamat e-mel',
     subConsent: 'Saya bersetuju Yush Abdullah (NAVMAP) menyimpan alamat e-mel saya dan menghantar berita, kemas kini dan kempen NAVMAP akan datang. Saya boleh berhenti melanggan pada bila-bila masa. Lihat <a href="/privacy.html" target="_blank">Dasar Privasi</a>.',

@@ -13,7 +13,7 @@ const C = {
     meH: 'About me',
     me: [
       "Hi, I'm Yusri Abdullah (Yush Abdullah), the founder of NAVMAP. I'm a product owner and PMO lead in Kuala Lumpur, and I build NAVMAP on my own as an independent Malaysian project.",
-      "I started out in public policy. I studied Government and Public Policy, then earned a Master's in Business Management. Since then I have worked in digital marketing, customer operations, HR, public health research and teaching, and today I own a hiring product at Aventra Group.",
+      "I started out in public policy. I studied Government and Public Policy, then earned a Master's in Business Management. Since then I have worked in digital marketing, customer operations, HR, public health research and teaching, and today I build people technology products.",
       'Outside work I write books and white papers, speak, train and volunteer, from business planning workshops for young entrepreneurs to leadership training for Indigenous communities. NAVMAP brings that wish to serve the community together with what I do every day: building products people trust.',
     ],
     meLink: 'More about me:',
@@ -60,7 +60,7 @@ const C = {
     meH: 'Tentang saya',
     me: [
       'Hai, saya Yusri Abdullah (Yush Abdullah), pengasas NAVMAP. Saya seorang pemilik produk dan peneraju PMO di Kuala Lumpur, dan saya membina NAVMAP sendiri sebagai projek bebas anak Malaysia.',
-      'Saya bermula dalam bidang dasar awam. Saya belajar Kerajaan dan Dasar Awam, kemudian memperoleh Sarjana Pengurusan Perniagaan. Sejak itu saya bekerja dalam pemasaran digital, operasi pelanggan, sumber manusia, penyelidikan kesihatan awam dan pengajaran, dan kini saya memiliki produk pengambilan pekerja di Aventra Group.',
+      'Saya bermula dalam bidang dasar awam. Saya belajar Kerajaan dan Dasar Awam, kemudian memperoleh Sarjana Pengurusan Perniagaan. Sejak itu saya bekerja dalam pemasaran digital, operasi pelanggan, sumber manusia, penyelidikan kesihatan awam dan pengajaran, dan kini saya membina produk teknologi sumber manusia.',
       'Di luar kerja, saya menulis buku dan kertas putih, berucap, melatih dan menjadi sukarelawan, daripada bengkel perancangan perniagaan untuk usahawan muda hingga latihan kepimpinan untuk komuniti Orang Asli. NAVMAP menggabungkan keinginan untuk berkhidmat kepada komuniti dengan apa yang saya lakukan setiap hari: membina produk yang dipercayai orang.',
     ],
     meLink: 'Lebih lanjut tentang saya:',

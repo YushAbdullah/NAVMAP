@@ -1,5 +1,6 @@
 // Spoken navigation using the browser's built-in speech (Web Speech API). No cost, works offline.
 import { packById, STD } from './voice-packs.js';
+import { duck } from './radio.js';
 
 const KEY = 'navmap.voice';
 const PACK_KEY = 'navmap.voicePack';
@@ -54,6 +55,10 @@ export function speak(text, pack, { queue = false, force = false } = {}) {
   const v = findVoice(pack);
   if (v) { u.voice = v; u.lang = v.lang; } else u.lang = pack.tts?.[0] || 'en-MY';
   u.rate = 1;
+  // Turn the radio down while directions are spoken, back up once the voice is quiet.
+  u.onstart = () => duck(true);
+  u.onend = u.onerror = () => setTimeout(() => { if (!speechSynthesis.speaking) duck(false); }, 400);
+  duck(true);
   speechSynthesis.speak(u);
 }
 
