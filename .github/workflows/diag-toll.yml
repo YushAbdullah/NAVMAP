@@ -1,0 +1,13 @@
+name: Toll diagnostic (temporary)
+on:
+  push:
+    branches: [claude/project-thread-za50y5]
+    paths: [scripts/diag-toll.mjs, .github/workflows/diag-toll.yml]
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node scripts/diag-toll.mjs
