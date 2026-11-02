@@ -1,5 +1,6 @@
 const STR = {
   en: {
+    aboutTitle: 'About NAVMAP', aboutLink: 'About', aboutCard: 'Who built it, our vision and mission, and why NAVMAP exists.', aboutOpen: 'Read',
     radioTitle: 'Radio', radioSearch: 'Search stations', radioLive: 'Live', radioConnecting: 'Connecting…', radioPaused: 'Stopped', radioPick: 'Pick a station below', radioError: 'This station is not playing right now. Try another one.',
     radioPlay: 'Play radio', radioStop: 'Stop radio', radioVolume: 'Radio volume', radioFav: 'Favourite', radioFavs: 'Favourites', radioRtm: 'RTM stations', radioPopular: 'Popular in Malaysia',
     radioLoading: 'Loading stations…', radioListFailed: 'Could not load the station list. Check your connection and try again.', radioNone: 'No station matches that search.',
@@ -131,6 +132,7 @@ const STR = {
     arrived: 'You have arrived', voiceOn: 'Turn voice on', voiceOff: 'Mute voice', voiceStyle: 'Voice', voiceStd: 'Standard', voiceDialects: 'Malaysian dialects', voiceLangs: 'Other languages', voiceMissing: 'No voice for this on your device yet, so EN/BM is used. Add it in your phone\'s text-to-speech settings.', voiceNote: 'Dialects are read by your device\'s Malay voice. Tap a style to hear a sample.', hours: 'Hours', call: 'Call', inMalaysia: 'Malaysia',
   },
   bm: {
+    aboutTitle: 'Tentang NAVMAP', aboutLink: 'Tentang', aboutCard: 'Siapa yang membinanya, visi dan misi kami, dan mengapa NAVMAP wujud.', aboutOpen: 'Baca',
     radioTitle: 'Radio', radioSearch: 'Cari stesen', radioLive: 'Siaran langsung', radioConnecting: 'Menyambung…', radioPaused: 'Berhenti', radioPick: 'Pilih stesen di bawah', radioError: 'Stesen ini tidak dapat dimainkan sekarang. Cuba stesen lain.',
     radioPlay: 'Main radio', radioStop: 'Henti radio', radioVolume: 'Kelantangan radio', radioFav: 'Kegemaran', radioFavs: 'Kegemaran', radioRtm: 'Stesen RTM', radioPopular: 'Popular di Malaysia',
     radioLoading: 'Memuatkan stesen…', radioListFailed: 'Senarai stesen tidak dapat dimuatkan. Semak sambungan dan cuba lagi.', radioNone: 'Tiada stesen sepadan dengan carian itu.',

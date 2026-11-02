@@ -28,6 +28,7 @@ import { getSaved, setSaved, savedKindAt, SAVED_KINDS } from './lib/saved.js';
 import { LOGO_CATS, logoUrl } from './lib/brands.js';
 import { fetchWeather, wmo, aqiLabel, AQ_LEVELS, placeName, radarFrames } from './lib/weather.js';
 import { HOTLINE_GROUPS } from './lib/hotlines.js';
+import { aboutHtml } from './lib/about.js';
 import * as radio from './lib/radio.js';
 
 const MAP_STYLE = import.meta.env.VITE_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
@@ -1214,6 +1215,8 @@ function setTab(tab) {
   renderNewsBar();
 }
 
+const footer = () => `<p class="copyright">${t('copyright')}<br><button class="linkish" data-action="about">${t('aboutLink')}</button> · <a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`;
+
 function render() {
   document.querySelectorAll('.tabs button').forEach((b) => {
     if (b.dataset.tab === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
@@ -1222,7 +1225,7 @@ function render() {
   const ae = document.activeElement;
   const keep = ae?.id === 'cm-text' ? [ae.selectionStart, ae.selectionEnd] : null; // a refresh must not kick someone out of typing
   body.innerHTML = S.tab === 'drive' ? viewDrive() : S.tab === 'alerts' ? viewAlerts() : S.tab === 'weather' ? viewWeather() : S.tab === 'news' ? viewNews() : (S.selected ? viewPlace() : viewExplore());
-  body.insertAdjacentHTML('beforeend', `${statsLine()}<p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`);
+  body.insertAdjacentHTML('beforeend', `${statsLine()}${footer()}`);
   syncLayout();
   if (S.tab === 'drive' && S.ptEdit) $('#pt-q')?.focus({ preventScroll: true });
   if (keep && $('#cm-text')) { const el = $('#cm-text'); el.focus({ preventScroll: true }); el.setSelectionRange(...keep); }
@@ -1267,9 +1270,11 @@ function saveButtons(p) {
     : `<button class="btn-ghost sm${S.saveMode === k ? ' pulse' : ''}" data-action="save-place" data-kind="${k}">${icon(k)}${tk(k === 'home' ? 'saveAsHome' : 'saveAsWork', k)}</button>`)).join('')}</div>`;
 }
 
+const aboutCard = () => `<div class="sub-card about-card"><span class="sub-ic">${icon('info')}</span><span class="mid"><b>${t('aboutTitle')}</b><small>${t('aboutCard')}</small></span><button class="btn-ghost sm" data-action="about">${t('aboutOpen')}</button></div>`;
+
 function viewExplore() {
   if (!S.cat) {
-    return `${savedBar()}<div class="sh-head"><h2>${t('pickCat')}</h2></div><p class="muted">${t('pickCatHint')}</p>${quickGrid()}<div class="sub-card"><span class="sub-ic">${icon('mail')}</span><span class="mid"><b>${t('subTitle')}</b><small>${t('subCard')}</small></span><button class="btn sm" data-action="subscribe">${t('subBtn')}</button></div>`;
+    return `${savedBar()}<div class="sh-head"><h2>${t('pickCat')}</h2></div><p class="muted">${t('pickCatHint')}</p>${quickGrid()}<div class="sub-card"><span class="sub-ic">${icon('mail')}</span><span class="mid"><b>${t('subTitle')}</b><small>${t('subCard')}</small></span><button class="btn sm" data-action="subscribe">${t('subBtn')}</button></div>${aboutCard()}`;
   }
   const c = CATEGORIES[S.cat];
   const head = `<div class="sh-head"><h2>${esc(c[getLang()])} ${t('nearby').toLowerCase()}</h2>${S.places.length > 3 ? `<button class="link" data-action="toggle-all">${S.showAll ? t('showLess') : `${t('seeAll')} (${S.places.length})`}</button>` : ''}</div>`;
@@ -2473,6 +2478,7 @@ document.addEventListener('click', (e) => {
   if (act === 'wx-retry') loadWeather(true);
   if (act === 'news-retry') loadNews(true);
   if (act === 'subscribe') openSubscribe();
+  if (act === 'about') openAbout();
   if (act === 'aq-pharmacy') loadPlaces('pharmacy');
   if (act === 'poll-jump') $('#poll')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
@@ -2754,7 +2760,7 @@ function renderSos() {
     </section>
     ${groups}
     <p class="source">${t('sosNote')}</p>
-    <p class="copyright">${t('copyright')}<br><a href="/terms.html">${t('terms')}</a> · <a href="/privacy.html">${t('privacy')}</a> · <button class="linkish" data-action="subscribe">${t('subLink')}</button></p>`;
+    ${footer()}`;
 }
 $('#sos-btn').addEventListener('click', () => { renderSos(); sosDlg.showModal(); });
 $('#sos-close').addEventListener('click', () => sosDlg.close());
@@ -2766,6 +2772,21 @@ sosDlg.addEventListener('click', async (e) => {
   const near = e.target.closest('[data-sos-cat]');
   if (near) { sosDlg.close(); openSheet(); loadPlaces(near.dataset.sosCat); }
 });
+
+// ---------------------------------------------------------------- About NAVMAP
+const aboutDlg = $('#about-dlg');
+function openAbout() {
+  $('#about-body').innerHTML = `${aboutHtml(getLang())}${footer()}`;
+  $('#about-body').scrollTop = 0;
+  if (!aboutDlg.open) aboutDlg.showModal();
+}
+$('#about-close').addEventListener('click', () => aboutDlg.close());
+aboutDlg.addEventListener('click', (e) => {
+  if (e.target === aboutDlg) { aboutDlg.close(); return; }
+  const a = e.target.closest('[data-action]')?.dataset.action;
+  if (a === 'subscribe') { aboutDlg.close(); openSubscribe(); }
+});
+aboutDlg.addEventListener('close', () => { if (location.hash === '#about') history.replaceState(null, '', location.pathname + location.search); });
 
 // ---------------------------------------------------------------- boot
 applyStatic();
@@ -2780,6 +2801,10 @@ loadPins();
 setInterval(() => { if (document.visibilityState === 'visible') loadPins(); }, (slowNet() ? 90 : 30) * 1000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadPins(); loadWeather(); } });
 setTimeout(() => loadWeather(), 1200);
+
+// deep link: #about opens About NAVMAP
+if (location.hash === '#about') openAbout();
+addEventListener('hashchange', () => { if (location.hash === '#about') openAbout(); });
 
 // deep link: ?cat=ev
 const urlCat = new URLSearchParams(location.search).get('cat');
