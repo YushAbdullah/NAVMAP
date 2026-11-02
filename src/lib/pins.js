@@ -196,3 +196,11 @@ export async function reactComment(pinId, cid, react) {
 export async function deleteComment(pinId, cid) {
   return json(await send('DELETE', `/api/pins?id=${encodeURIComponent(pinId)}&cid=${encodeURIComponent(cid)}`));
 }
+
+/** Ask the server to send the one-time welcome email to a newly confirmed member. */
+export async function requestWelcome(userId) {
+  const k = `navmap.welcomed.${userId}`;
+  try { if (localStorage.getItem(k)) return; } catch { /* ignore */ }
+  const d = await json(await send('POST', '/api/pins', { welcome: true })).catch(() => null);
+  if (d && ['sent', 'already'].includes(d.welcome)) { try { localStorage.setItem(k, '1'); } catch { /* ignore */ } }
+}

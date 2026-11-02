@@ -24,6 +24,8 @@
 // - Updates: nickname from a hash of the device code (no name), links and phone numbers refused,
 //   swear words masked, 20 updates per device and 60 per network per hour, 3 reports hide one.
 import { createHash, randomBytes } from 'node:crypto';
+import nodemailer from 'nodemailer';
+import { welcomeEmail } from '../src/lib/welcome-email.js';
 import { PIN_BY_ID } from '../src/lib/pin-types.js';
 import { shouldHide, confirmedExpiry, SAME_SPOT_M } from '../src/lib/pin-trust.js';
 import { distKm } from '../src/lib/geo.js';
@@ -39,6 +41,29 @@ const MAX_TOPICS = 500;
 const TOPICS_PER_HOUR = 10;       // new discussions per network per hour
 const SB_URL = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const SB_ANON = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Welcome email (optional): SMTP_USER + SMTP_PASS, e.g. a Gmail address and its app password.
+const SMTP = {
+  host: process.env.SMTP_HOST || 'smtp.gmail.com', port: Number(process.env.SMTP_PORT || 465),
+  user: process.env.SMTP_USER || '', pass: process.env.SMTP_PASS || '',
+  from: process.env.MAIL_FROM || (process.env.SMTP_USER ? `NAVMAP <${process.env.SMTP_USER}>` : ''),
+};
+
+/** Send the welcome email once per member. Returns 'sent' | 'already' | 'off' | 'unconfirmed'. */
+async function sendWelcome(member) {
+  if (!SMTP.user || !SMTP.pass) return 'off';
+  if (!member.email || !member.confirmed) return 'unconfirmed';
+  const flag = `navmap:welcomed:${member.key.slice(0, 32)}`;
+  if ((await redis('SET', flag, '1', 'NX')) !== 'OK') return 'already';
+  try {
+    const mail = welcomeEmail(member.name);
+    await nodemailer.createTransport({ host: SMTP.host, port: SMTP.port, secure: SMTP.port === 465, auth: { user: SMTP.user, pass: SMTP.pass } })
+      .sendMail({ from: SMTP.from, to: member.email, subject: mail.subject, html: mail.html, text: mail.text });
+    return 'sent';
+  } catch (e) {
+    await redis('DEL', flag); // try again next sign-in
+    throw e;
+  }
+}
 const MAX_PINS = 5000;
 const PER_HOUR = 20;          // new pins per network per hour
 const VOTES_PER_HOUR = 60;    // votes per network per hour
@@ -102,7 +127,7 @@ async function whoIs(req) {
         const u = await r.json();
         const md = u.user_metadata || {};
         const name = cleanName(md.display_name) || cleanName(String(md.full_name || md.name || '').split(' ')[0]) || 'Member';
-        member = { id: u.id, name, key: sha(`user:${u.id}`) };
+        member = { id: u.id, name, key: sha(`user:${u.id}`), email: u.email || '', confirmed: !!(u.email_confirmed_at || u.confirmed_at) };
       }
     } catch { /* treat as anonymous */ }
   }
@@ -350,6 +375,15 @@ export default async function handler(req, res) {
         if (now && JSON.parse(now).id === c.id) await redis('LSET', cKey(p.id), i, JSON.stringify(c));
         if (c.hidden) await saveSummary(p.id, list);
         res.status(200).json({ configured: true, hidden: !!c.hidden, flagged: body.react === 'flag', comment: c.hidden ? null : { ...publicComment(c, me, got.topic ? null : p.owner), helpedByMe } });
+        return;
+      }
+
+      // Welcome email after someone becomes a member (sent once)
+      if (body.welcome) {
+        if (!me.member) { res.status(401).json({ configured: true, error: 'signin' }); return; }
+        if (await overLimit(`navmap:rlw:${ipHash}`, 10, 3600)) { res.status(429).json({ configured: true, error: 'rate' }); return; }
+        const out = await sendWelcome(me.member).catch((e) => { console.error('welcome email', e?.message); return 'failed'; });
+        res.status(200).json({ configured: true, welcome: out });
         return;
       }
 

@@ -42,7 +42,7 @@ export function cleanName(raw) {
   const n = plain(raw, 24);
   if (n.length < 2) return null;
   const c = cleanText(n);
-  if (c.error || c.text !== n || RESERVED.test(n)) return null;
+  if (c.error || c.text !== n || RESERVED.test(n) || !/^[\p{L}\p{M}\p{N} .'-]+$/u.test(n)) return null;
   return n;
 }
 

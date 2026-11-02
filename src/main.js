@@ -17,7 +17,7 @@ import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil
 import { speak, setVoice, voiceOn, voiceSupported, activePack, getVoicePack, setVoicePack, findVoice, voicesLoaded } from './lib/voice.js';
 import { VOICE_PACKS } from './lib/voice-packs.js';
 import { PIN_TYPES } from './lib/pin-types.js';
-import { listPins, addPin, removePin, votePin, getThread, postComment, reactComment, deleteComment, shareNews } from './lib/pins.js';
+import { listPins, addPin, removePin, votePin, getThread, postComment, reactComment, deleteComment, shareNews, requestWelcome } from './lib/pins.js';
 import { TAGS, DISCUSS_TAGS, TAG_BY_ID, MAX_TEXT, cleanName } from './lib/community.js';
 import * as auth from './lib/auth.js';
 import { applyPlay, PLAY_PITCH } from './lib/play.js';
@@ -2057,6 +2057,7 @@ auth.onChange((u, evt) => {
     toast(t('authSignedIn').replace('{n}', auth.displayName(u) || t('commMember')));
   }
   if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT' || (evt === 'INITIAL_SESSION' && u)) loadPins();
+  if (u?.email_confirmed_at && (evt === 'SIGNED_IN' || evt === 'INITIAL_SESSION')) requestWelcome(u.id); // once per member
   if (S.tab === 'alerts' || S.tab === 'news') render();
 });
 
