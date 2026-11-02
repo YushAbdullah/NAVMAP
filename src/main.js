@@ -5,7 +5,7 @@ import './style.css';
 import { t, L, getLang, setLang, applyStatic } from './lib/i18n.js';
 import { icon, maneuverIcon } from './lib/icons.js';
 import { distKm, distToLineKm, fmtDist, fmtDur, fmtAgo, circle, KL, MY_BBOX } from './lib/geo.js';
-import { CATEGORIES, fetchNearby, prefetchNearby } from './lib/places.js';
+import { CATEGORIES, fetchNearby, prefetchNearby, raceOverpass } from './lib/places.js';
 import { searchPlaces, reverseName } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
 import { getTransit, clock, delayMin, isWalk, isRail, TZ } from './lib/transit.js';
@@ -296,26 +296,82 @@ async function withNoToll(from, to, signal) {
   return [...main.slice(0, 2), tollFree];
 }
 
+/**
+ * The fastest route has no tolls: look for one that uses a toll expressway anyway, so the driver can choose.
+ * OSRM cannot be told to prefer tolls, so we find tolled motorways near the trip (OpenStreetMap toll=yes)
+ * and route through the best-placed ones, keeping the quickest that really uses a toll road.
+ */
+async function addTollRoute(routes, from, to, signal) {
+  const direct = distKm(from, to);
+  if (direct < 3) { S.tollSearch = 'none'; return; }
+  S.tollSearch = 'loading';
+  const mid = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+  const radius = Math.round(Math.min(direct / 2 + 5, 40) * 1000);
+  try {
+    const json = await raceOverpass(`[out:json][timeout:15];way[toll=yes][highway~"^(motorway|trunk)$"](around:${radius},${mid[1]},${mid[0]});out center 300;`, { signal, timeoutMs: 12000 });
+    const cands = json.elements.filter((e) => e.center).map((e) => {
+      const c = [e.center.lon, e.center.lat];
+      return { c, detour: distKm(from, c) + distKm(c, to) - direct };
+    }).filter((x) => x.detour < direct * 0.4 + 3).sort((a, b) => a.detour - b.detour);
+    // Spread the tries: skip candidates within 2 km of one already chosen.
+    const picks = [];
+    for (const x of cands) { if (picks.every((p) => distKm(p.c, x.c) > 2)) picks.push(x); if (picks.length === 3) break; }
+    const tries = await Promise.all(picks.map((p) => getRoutes(from, to, signal, { via: p.c }).then((r) => r[0]).catch(() => null)));
+    const best = tries.filter((r) => r?.tolls?.length && r.duration < routes[0].duration * 1.6).sort((a, b) => a.duration - b.duration)[0];
+    if (signal.aborted || S.routes !== routes) return;
+    if (!best) { S.tollSearch = 'none'; } else {
+      best.withToll = true;
+      scanRoute(best);
+      routes.push(best);
+      labelRoutes(routes);
+      S.tollSearch = 'ok';
+      if (!S.avoidTolls && S.useTollsPicked) S.routeIdx = routes.length - 1;
+      drawRoutes();
+      checkRouteArea([best], signal);
+    }
+  } catch (e) {
+    if (e.name === 'AbortError' || signal.aborted) return;
+    S.tollSearch = 'none';
+  }
+  if (S.tab === 'drive' && !S.ptEdit && !S.nav) render();
+}
+
 function tollTag(r) {
   if (!r.tolls?.length) return r.label === 'noToll' ? '' : ` · ${t('tollFree')}`;
   return ` · ${t('tollShort')} ${rm(tollEstimate(r.tolls, S.mode).rm)}`;
 }
 
 /** Tolls: allowed or avoided. The choice is remembered and picks the matching route. */
+/** Quickest route that does (toll = true) or does not use toll roads, as an index into S.routes. */
+function bestIdx(toll) {
+  let best = -1;
+  S.routes.forEach((x, i) => { if (Boolean(x.tolls?.length) === toll && (best < 0 || x.duration < S.routes[best].duration)) best = i; });
+  return best;
+}
+
+/** Tolls: two cards side by side, with toll road and without, each with its time and toll. */
 function tollBar() {
-  // Always offered for car and motorcycle, so the choice is there before you need it.
-  const anyToll = S.routes.some((x) => x.tolls?.length);
-  const free = S.routes.findIndex((x) => !x.tolls?.length);
-  return `<div class="toll-bar" role="group" aria-label="${esc(t('tollTitle'))}"><span>${t('tollTitle')}</span>
-    <button class="chip" data-action="tolls" data-v="use" aria-pressed="${!S.avoidTolls}">${t('tollUse')}</button>
-    <button class="chip" data-action="tolls" data-v="avoid" aria-pressed="${S.avoidTolls}">${t('tollAvoid')}</button></div>
-    ${S.avoidTolls && free < 0 ? `<p class="muted pt-note">${t('tollNoFree')}</p>` : ''}
-    ${!S.avoidTolls && !anyToll ? `<p class="muted pt-note">${t('tollNoneFaster')}</p>` : ''}`;
+  const lang = getLang();
+  const ti = bestIdx(true), fi = bestIdx(false);
+  const tr = S.routes[ti], fr = S.routes[fi];
+  const sel = S.routes[S.routeIdx];
+  const selToll = Boolean(sel?.tolls?.length);
+  const diff = tr && fr ? Math.round((fr.duration - tr.duration) / 60) : 0;
+  const tollCard = tr
+    ? `<b>${fmtDur(tr.duration, lang)}</b><small>${t('tollShort')} ${rm(tollEstimate(tr.tolls, S.mode).rm)}${diff > 0 ? ` · ${t('tollSaves').replace('{n}', diff)}` : diff < 0 ? ` · ${t('tollSlower').replace('{n}', -diff)}` : ''}</small>`
+    : S.tollSearch === 'loading' ? `<small><span class="spinner"></span>${t('tollSearching')}</small>` : `<small>${t('tollNone')}</small>`;
+  const freeCard = fr
+    ? `<b>${fmtDur(fr.duration, lang)}</b><small>${t('tollFree')} · RM0</small>`
+    : `<small>${t('tollNoFree')}</small>`;
+  return `<div class="toll-bar" role="group" aria-label="${esc(t('tollTitle'))}">
+    <button class="toll-opt" data-action="tolls" data-v="use" aria-pressed="${Boolean(tr) && selToll}"${tr ? '' : ' disabled'}><span>${t('tollUse')}</span>${tollCard}</button>
+    <button class="toll-opt" data-action="tolls" data-v="avoid" aria-pressed="${Boolean(fr) && !selToll}"${fr ? '' : ' disabled'}><span>${t('tollAvoid')}</span>${freeCard}</button></div>`;
 }
 function setAvoidTolls(on) {
   S.avoidTolls = on;
+  S.useTollsPicked = !on;
   try { localStorage.setItem('navmap.avoidTolls', on ? '1' : ''); } catch { /* private mode */ }
-  const pick = on ? S.routes.findIndex((x) => !x.tolls?.length) : 0;
+  const pick = bestIdx(!on);
   if (pick >= 0) S.routeIdx = pick;
   drawRoutes(); render();
 }
@@ -548,6 +604,8 @@ async function computeRoute() {
     S.routeStatus = 'ok';
     drawRoutes();
     checkRouteArea(routes, routeAbort.signal);
+    S.tollSearch = null;
+    if (!isTransit() && !routes.some((x) => x.tolls?.length)) addTollRoute(routes, from, [dest.lon, dest.lat], routeAbort.signal);
     fitTo(routes[0].coords.filter((_, i, a) => i % Math.ceil(a.length / 60) === 0).concat([[dest.lon, dest.lat], from]), 16);
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -647,7 +705,7 @@ function labelRoutes(routes) {
   if (routes[0]?.transit) { routes.forEach((r) => { r.label = 'alt'; }); return; }
   const n0 = hazardCount(routes[0]);
   const safer = routes.findIndex((r) => hazardCount(r) < n0);
-  routes.forEach((r, i) => { r.label = i === 0 ? 'fastest' : (i === safer ? 'safest' : r.noToll ? 'noToll' : 'alt'); });
+  routes.forEach((r, i) => { r.label = i === 0 ? 'fastest' : (i === safer ? 'safest' : r.noToll ? 'noToll' : r.withToll ? 'withToll' : 'alt'); });
 }
 
 /** Haze and state weather warnings need network lookups, so they arrive a moment after the route. */

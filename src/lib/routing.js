@@ -2,9 +2,10 @@
 // for real public traffic, self-host OSRM or switch to a paid provider (see README).
 const OSRM = import.meta.env?.VITE_OSRM_URL || 'https://router.project-osrm.org';
 
-/** opts.noToll asks OSRM to keep off roads that charge a toll (exclude=toll). */
+/** opts.noToll asks OSRM to keep off roads that charge a toll (exclude=toll); opts.via routes through a point. */
 export async function getRoutes(from, to, signal, opts = {}) {
-  const url = `${OSRM}/route/v1/driving/${from[0]},${from[1]};${to[0]},${to[1]}?overview=full&geometries=geojson&steps=true&alternatives=true${opts.noToll ? '&exclude=toll' : ''}`;
+  const pts = [from, opts.via, to].filter(Boolean).map((p) => `${p[0]},${p[1]}`).join(';');
+  const url = `${OSRM}/route/v1/driving/${pts}?overview=full&geometries=geojson&steps=true&alternatives=${opts.via ? 'false' : 'true'}${opts.noToll ? '&exclude=toll' : ''}`;
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`Routing ${res.status}`);
   const json = await res.json();
