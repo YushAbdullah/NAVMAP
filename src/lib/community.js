@@ -15,7 +15,36 @@ export const TAGS = [
   { id: 'passable', en: 'Passable with care', bm: 'Boleh lalu, hati-hati', vote: null, tone: 'warn' },
   { id: 'cleared', en: 'All clear', bm: 'Sudah selamat', vote: 'gone', tone: 'ok' },
 ];
-export const TAG_BY_ID = Object.fromEntries(TAGS.map((x) => [x.id, x]));
+// Tags for discussions about a news story: how to handle it, opinions, offers of help.
+export const DISCUSS_TAGS = [
+  { id: 'tip', en: 'How to handle it', bm: 'Cara menangani', vote: null, tone: 'ok' },
+  { id: 'opinion', en: 'My view', bm: 'Pendapat saya', vote: null, tone: 'info' },
+  { id: 'question', en: 'Question', bm: 'Soalan', vote: null, tone: 'warn' },
+  { id: 'help', en: 'I can help', bm: 'Saya boleh bantu', vote: null, tone: 'ok' },
+];
+export const TAG_BY_ID = Object.fromEntries([...TAGS, ...DISCUSS_TAGS].map((x) => [x.id, x]));
+export const PIN_TAG_IDS = new Set(TAGS.map((x) => x.id));
+export const DISCUSS_TAG_IDS = new Set(DISCUSS_TAGS.map((x) => x.id));
+
+// News stories can be discussed only when they come from the feeds the News tab reads.
+const NEWS_HOSTS = ['news.google.com', 'malaymail.com', 'thestar.com.my', 'theguardian.com', 'bbc.co.uk', 'bbc.com', 'news.un.org', 'mongabay.com'];
+export function newsUrlOk(u) {
+  try {
+    const x = new URL(u);
+    return /^https?:$/.test(x.protocol) && NEWS_HOSTS.some((h) => x.hostname === h || x.hostname.endsWith(`.${h}`));
+  } catch { return false; }
+}
+export const plain = (s, max) => String(s || '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+
+// Member display names: 2..24 characters, no links or phone numbers, nothing that looks official.
+const RESERVED = /\b(navmap|admin|moderator|official|rasmi|bomba|polis|police|pdrm|nadma|jkm|apm|metmalaysia|kerajaan|government)\b/i;
+export function cleanName(raw) {
+  const n = plain(raw, 24);
+  if (n.length < 2) return null;
+  const c = cleanText(n);
+  if (c.error || c.text !== n || RESERVED.test(n)) return null;
+  return n;
+}
 
 // Malaysian animals for anonymous nicknames, e.g. "Kancil 42".
 const ANIMALS = ['Kancil', 'Harimau', 'Tapir', 'Enggang', 'Penyu', 'Gajah', 'Beruang', 'Seladang', 'Memerang', 'Helang',

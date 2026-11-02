@@ -17,8 +17,9 @@ import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil
 import { speak, setVoice, voiceOn, voiceSupported, activePack, getVoicePack, setVoicePack, findVoice, voicesLoaded } from './lib/voice.js';
 import { VOICE_PACKS } from './lib/voice-packs.js';
 import { PIN_TYPES } from './lib/pin-types.js';
-import { listPins, addPin, removePin, votePin, getThread, postComment, reactComment, deleteComment } from './lib/pins.js';
-import { TAGS, TAG_BY_ID, MAX_TEXT } from './lib/community.js';
+import { listPins, addPin, removePin, votePin, getThread, postComment, reactComment, deleteComment, shareNews } from './lib/pins.js';
+import { TAGS, DISCUSS_TAGS, TAG_BY_ID, MAX_TEXT, cleanName } from './lib/community.js';
+import * as auth from './lib/auth.js';
 import { applyPlay, PLAY_PITCH } from './lib/play.js';
 import { award, getScore, levelOf, LEVEL_PTS, BADGES } from './lib/score.js';
 import * as pinsMod from './lib/pins.js';
@@ -1699,7 +1700,8 @@ function alertCard(a, ref, lang) {
 // Every community pin has a short thread of updates: one-tap status tags ("Getting worse",
 // "Road closed", "All clear") and a line of text. The Community filter in Alerts is a live feed
 // ordered by the latest activity. Nicknames are anonymous; see src/lib/community.js and api/pins.js.
-const canTalk = (a) => a.kind === 'report' && !!pinsMod.shared && !String(a.pinId).startsWith('l');
+const canTalk = (a) => (a.kind === 'topic' || a.kind === 'report') && !!pinsMod.shared && !String(a.pinId).startsWith('l');
+const findItem = (id) => S.reports.find((r) => r.pinId === id) || pinsMod.topics.find((x) => x.pinId === id);
 function talkBtn(a) {
   if (!canTalk(a) || S.thread) return '';
   const n = a.comments || 0;
@@ -1713,16 +1715,37 @@ const avatar = (h) => `<span class="av" style="--h:${handleHue(h)}" aria-hidden=
 const pinTitle = (a) => (a.type === 'ask' && a.note ? `“${a.note}”` : L(a, 'title'));
 
 function viewCommunity(lang, ref) {
-  const list = S.reports.filter((a) => a.kind === 'report')
+  const list = [...S.reports.filter((a) => a.kind === 'report'), ...pinsMod.topics]
     .sort((x, y) => new Date(y.lastActivityAt || y.time) - new Date(x.lastActivityAt || x.time));
   const live = pinsMod.shared ? `<span class="live-dot">${t('commLive')}</span>` : `<span class="live-dot off">${t('deviceOnly')}</span>`;
   const top = `<div class="comm-top"><div><h3>${t('commTitle')}</h3><p class="muted">${t('commLead')}</p></div>${live}</div>
+    ${accountLine()}
     <div class="comm-cta"><button class="btn" data-action="comm-post">${icon('pin')}${t('commPost')}</button><button class="btn-ghost" data-action="comm-ask">${icon('chat')}${t('commAsk')}</button></div>`;
   if (!list.length) return `${top}<div class="empty-state">${icon('users')}${t('commEmpty')}</div>`;
   return `${top}<ul class="alist">${list.slice(0, 100).map((a) => commCard(a, ref, lang)).join('')}</ul>`;
 }
 
+function accountLine() {
+  const u = auth.user();
+  if (u) return `<div class="acct">${icon('user')}<span>${t('postingAs').replace('{n}', `<b>${esc(auth.displayName(u) || t('commMember'))}</b>`)} <span class="cm-badge mem">${t('commMember')}</span></span><button class="link" data-action="account">${t('accountLink')}</button></div>`;
+  return `<div class="acct">${icon('user')}<span>${t('postingAnon')}</span>${auth.available() ? `<button class="link" data-action="join">${t('signInLink')}</button>` : ''}</div>`;
+}
+
+function topicCard(a, lang) {
+  const last = a.last;
+  return `<li class="acard ccard info topic">
+    <button class="acard-head" data-action="thread" data-pin="${esc(a.pinId)}">
+      <span class="ic info">${icon('news')}</span>
+      <span class="mid"><span class="acard-top"><span class="ago">${esc(a.source)} · ${t('discussStarted').replace('{t}', esc(fmtAgo(a.time, lang)))}</span></span>
+        <b>${esc(a.title)}</b>
+        ${last ? `<span class="last">${avatar(last.handle)}<span><b>${esc(last.handle)}</b> ${tagChip(last.tag)} ${esc(last.text || '')}<small> · ${esc(fmtAgo(last.at, lang))}</small></span></span>` : `<span class="last none">${t('commNone')}</span>`}</span>
+    </button>
+    <div class="acard-meta"><small class="pin-trust">${t('discussTitle')}</small><button type="button" class="talk" data-action="thread" data-pin="${esc(a.pinId)}">${icon('chat')}${a.comments ? esc(updatesLabel(a.comments)) : t('commJoin')}</button></div>
+  </li>`;
+}
+
 function commCard(a, ref, lang) {
+  if (a.kind === 'topic') return topicCard(a, lang);
   const sev = a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info';
   const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
   const last = a.last;
@@ -1742,20 +1765,24 @@ function commCard(a, ref, lang) {
 
 function viewThread(lang, ref) {
   const th = S.thread;
-  const a = S.reports.find((r) => r.pinId === th.pinId) || th.alert;
+  const a = findItem(th.pinId) || th.alert;
+  const isTopic = a?.kind === 'topic';
   const back = `<div class="th-head"><button class="link back" data-action="thread-back">${icon('back')}${t('commBack')}</button><span class="live-dot">${t('commLive')}</span></div>`;
   if (!a || th.status === 'gone') return `${back}<div class="empty-state">${icon('clock')}${t('commGone')}</div>`;
-  const card = `<ul class="alist">${alertCard({ ...a, title: pinTitle(a), title_bm: pinTitle(a), ...(a.note && a.type !== 'ask' ? { desc: a.note, desc_bm: a.note } : {}) }, ref, lang)}</ul>`;
-  const tags = TAGS.map((x) => `<button type="button" class="ctag-btn ${x.tone}" data-action="cm-tag" data-tag="${x.id}" aria-pressed="${th.tag === x.id}">${esc(lang === 'bm' ? x.bm : x.en)}</button>`).join('');
+  const card = isTopic
+    ? `<ul class="alist"><li class="acard info topic"><div class="acard-head"><span class="ic info">${icon('news')}</span><span class="mid"><span class="acard-top"><span class="ago">${esc(a.source)} · ${esc(fmtAgo(a.time, lang))}</span></span><b>${esc(a.title)}</b>
+        <a class="read-link" href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${icon('share')}${t('discussRead')}</a></span></div></li></ul>`
+    : `<ul class="alist">${alertCard({ ...a, title: pinTitle(a), title_bm: pinTitle(a), ...(a.note && a.type !== 'ask' ? { desc: a.note, desc_bm: a.note } : {}) }, ref, lang)}</ul>`;
+  const tags = (isTopic ? DISCUSS_TAGS : TAGS).map((x) => `<button type="button" class="ctag-btn ${x.tone}" data-action="cm-tag" data-tag="${x.id}" aria-pressed="${th.tag === x.id}">${esc(lang === 'bm' ? x.bm : x.en)}</button>`).join('');
   const len = (th.draft || '').length;
   const composer = `<form id="cm-form" class="composer" autocomplete="off">
       <span class="cm-label">${t('commTagHint')}</span>
       <div class="cm-tags" role="group" aria-label="${t('commTagHint')}">${tags}</div>
-      <textarea id="cm-text" rows="2" maxlength="${MAX_TEXT}" placeholder="${esc(t('commPlaceholder'))}" aria-label="${esc(t('commPlaceholder'))}">${esc(th.draft || '')}</textarea>
-      <div class="cm-row"><small class="cm-rules">${t('commRules')}</small><span class="cm-count" id="cm-count">${len}/${MAX_TEXT}</span>
+      <textarea id="cm-text" rows="2" maxlength="${MAX_TEXT}" placeholder="${esc(t(isTopic ? 'discussPh' : 'commPlaceholder'))}" aria-label="${esc(t(isTopic ? 'discussPh' : 'commPlaceholder'))}">${esc(th.draft || '')}</textarea>
+      <div class="cm-row"><small class="cm-rules">${auth.user() ? t('commRulesMember').replace('{n}', esc(auth.displayName() || t('commMember'))) : t('commRules')}</small><span class="cm-count" id="cm-count">${len}/${MAX_TEXT}</span>
       <button class="btn sm" type="submit"${th.sending ? ' disabled' : ''}>${th.sending ? '<span class="spinner"></span>' : icon('nav')}${t('commSend')}</button></div>
     </form>`;
-  return `${back}${card}${composer}<div id="thread-list">${threadList(lang)}</div>`;
+  return `${back}${card}${accountLine()}${composer}<div id="thread-list">${threadList(lang)}</div>`;
 }
 
 function threadList(lang) {
@@ -1767,7 +1794,7 @@ function threadList(lang) {
   return `<h3 class="cm-h">${esc(updatesLabel(list.length))}</h3><ul class="clist">${list.map((c) => `<li class="cm">
       ${avatar(c.handle)}
       <div class="cm-body">
-        <div class="cm-top"><b>${esc(c.handle)}</b>${c.byPinner ? `<span class="cm-badge">${t('commPinner')}</span>` : ''}${c.mine ? `<span class="cm-badge you">${t('commYou')}</span>` : ''}<small>${esc(fmtAgo(c.at, lang))}</small></div>
+        <div class="cm-top"><b>${esc(c.handle)}</b>${c.member ? `<span class="cm-badge mem">${t('commMember')}</span>` : ''}${c.byPinner ? `<span class="cm-badge">${t('commPinner')}</span>` : ''}${c.mine ? `<span class="cm-badge you">${t('commYou')}</span>` : ''}<small>${esc(fmtAgo(c.at, lang))}</small></div>
         ${c.tag ? tagChip(c.tag) : ''}${c.text ? `<p>${esc(c.text)}</p>` : ''}
         <div class="cm-acts">
           ${c.mine ? (c.helpful ? `<span class="cm-help-n">${icon('heart')}${c.helpful}</span>` : '')
@@ -1780,7 +1807,7 @@ function threadList(lang) {
 
 function openThread(pinId) {
   popup?.remove();
-  const a = S.reports.find((r) => r.pinId === pinId);
+  const a = findItem(pinId);
   S.thread = { pinId, status: 'loading', comments: null, tag: null, draft: '', alert: a };
   if (S.tab !== 'alerts') { openSheet(); setTab('alerts'); } else render();
   if (sheetState !== 'full') setSheet('full');
@@ -1796,7 +1823,7 @@ async function loadThread() {
     const out = await getThread(th.pinId);
     if (S.thread !== th) return;
     th.comments = out.comments; th.status = 'ok'; th.alert = out.alert;
-    S.reports = S.reports.map((r) => (r.pinId === th.pinId ? out.alert : r));
+    if (out.alert.kind !== 'topic') S.reports = S.reports.map((r) => (r.pinId === th.pinId ? out.alert : r));
   } catch (err) {
     if (S.thread !== th) return;
     th.status = err.message === 'gone' ? 'gone' : 'error';
@@ -1825,7 +1852,7 @@ async function sendComment() {
       return;
     }
     th.draft = ''; th.tag = null;
-    if (out.alert) S.reports = S.reports.map((r) => (r.pinId === th.pinId ? out.alert : r));
+    if (out.alert && out.alert.kind !== 'topic') S.reports = S.reports.map((r) => (r.pinId === th.pinId ? out.alert : r));
     if (out.comment) th.comments = [...(th.comments || []), out.comment];
     toast(t('commPosted'));
     drawAlerts();
@@ -1879,6 +1906,168 @@ document.addEventListener('keydown', (e) => {
   if (e.target.id === 'cm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendComment(); }
 });
 
+
+// ---------------------------------------------------------------- community membership
+// Before someone first enters Community we ask once: register (Google or email) or stay anonymous.
+// Members post with their display name and a Member badge; see src/lib/auth.js (Supabase Auth).
+let newsShown = [];
+let joinNext = null;                 // what to do after the join screen (open Community, a thread, ...)
+const joinDlg = $('#join-dlg');
+
+async function gate(next) {
+  auth.init();
+  if (auth.choice() || auth.user()) { next(); return; }
+  await auth.init();
+  if (!auth.available()) { auth.setChoice('anon'); next(); return; } // nothing to sign in with yet
+  joinNext = next;
+  openJoin('start');
+}
+function finishJoin(kind) {
+  auth.setChoice(kind);
+  if (joinDlg.open) joinDlg.close();
+  const n = joinNext; joinNext = null;
+  if (n) n(); else render();
+}
+joinDlg.addEventListener('close', () => { joinNext = null; });
+
+async function openJoin(mode, note = '') {
+  await auth.init();
+  $('#join-body').innerHTML = joinView(mode, note);
+  if (!joinDlg.open) joinDlg.showModal();
+  $('#join-body input')?.focus();
+}
+
+function joinView(mode, note) {
+  const close = `<button type="button" class="icon-btn join-x" data-join="close" aria-label="${t('close')}">${icon('close')}</button>`;
+  const backBtn = `<button type="button" class="btn-ghost" data-join="start">${t('authBack')}</button>`;
+  const msg = note ? `<p class="join-msg">${esc(note)}</p>` : '';
+  const field = (id, type, label, extra = '') => `<label class="join-field"><span>${label}</span><input id="${id}" type="${type}" ${extra}></label>`;
+  if (mode === 'start') {
+    if (!auth.available()) return `${close}<h2 id="join-title">${t('joinTitle')}</h2><p class="muted">${t('joinOff')}</p><button class="btn" data-join="anon">${t('joinAnon')}</button>`;
+    return `${close}<h2 id="join-title">${t('joinTitle')}</h2><p class="muted">${t('joinLead')}</p>${msg}
+      <div class="join-btns">
+        <button type="button" class="btn google" data-join="google"><span class="g">G</span>${t('joinGoogle')}</button>
+        <button type="button" class="btn-ghost" data-join="register">${icon('mail')}${t('joinEmail')}</button>
+        <button type="button" class="link" data-join="signin">${t('joinSignIn')}</button>
+      </div>
+      <div class="join-or"><span>${t('authOr')}</span></div>
+      <button type="button" class="btn-ghost anon" data-join="anon">${icon('users')}${t('joinAnon')}</button>
+      <p class="join-note">${t('joinAnonNote')}</p>`;
+  }
+  if (mode === 'register') return `${close}<h2 id="join-title">${t('joinEmail')}</h2>${msg}
+    <form class="join-form" data-form="register">
+      ${field('j-name', 'text', t('authName'), 'maxlength="24" autocomplete="nickname" required')}<small class="join-hint">${t('authNameHint')}</small>
+      ${field('j-email', 'email', t('authEmail'), 'autocomplete="email" required')}
+      ${field('j-pw', 'password', t('authPassword'), 'minlength="8" autocomplete="new-password" required')}
+      <p class="join-note">${t('authConsent')}</p>
+      <div class="join-row">${backBtn}<button class="btn" type="submit">${t('authRegister')}</button></div>
+    </form>`;
+  if (mode === 'signin') return `${close}<h2 id="join-title">${t('authSignIn')}</h2>${msg}
+    <form class="join-form" data-form="signin">
+      ${field('j-email', 'email', t('authEmail'), 'autocomplete="email" required')}
+      ${field('j-pw', 'password', t('authPassword'), 'autocomplete="current-password" required')}
+      <button type="button" class="link" data-join="forgot">${t('authForgot')}</button>
+      <div class="join-row">${backBtn}<button class="btn" type="submit">${t('authSignIn')}</button></div>
+    </form>`;
+  if (mode === 'forgot') return `${close}<h2 id="join-title">${t('authForgot')}</h2><p class="muted">${t('authForgotLead')}</p>${msg}
+    <form class="join-form" data-form="forgot">
+      ${field('j-email', 'email', t('authEmail'), 'autocomplete="email" required')}
+      <div class="join-row"><button type="button" class="btn-ghost" data-join="signin">${t('authBack')}</button><button class="btn" type="submit">${t('authSendLink')}</button></div>
+    </form>`;
+  if (mode === 'newpw') return `${close}<h2 id="join-title">${t('authNewPw')}</h2>${msg}
+    <form class="join-form" data-form="newpw">
+      ${field('j-pw', 'password', t('authPassword'), 'minlength="8" autocomplete="new-password" required')}
+      <div class="join-row"><button class="btn" type="submit">${t('authNewPwBtn')}</button></div>
+    </form>`;
+  if (mode === 'account') {
+    const u = auth.user();
+    if (!u) return joinView('start', note);
+    return `${close}<h2 id="join-title">${t('authAccount')}</h2><p class="muted">${esc(u.email || '')}</p>${msg}
+    <form class="join-form" data-form="rename">
+      ${field('j-name', 'text', t('authName'), `maxlength="24" value="${esc(auth.displayName(u))}" required`)}<small class="join-hint">${t('authNameHint')}</small>
+      <div class="join-row"><button type="button" class="btn-ghost" data-join="signout">${t('authSignOut')}</button><button class="btn" type="submit">${t('authSave')}</button></div>
+    </form>`;
+  }
+  // 'sent' | 'confirm': a message and OK
+  return `${close}<h2 id="join-title">${t('joinTitle')}</h2><p class="join-msg ok">${esc(note)}</p><button class="btn" data-join="close">OK</button>`;
+}
+
+const authErr = (e) => t('authFailed').replace('{e}', e?.message || '');
+$('#join-body').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-join]');
+  if (!b) return;
+  const j = b.dataset.join;
+  if (j === 'close') { joinDlg.close(); return; }
+  if (j === 'anon') { finishJoin('anon'); return; }
+  if (j === 'google') {
+    auth.setChoice('member'); // we come back to the page after Google
+    try { await auth.google(); } catch (err) { auth.setChoice(''); openJoin('start', authErr(err)); }
+    return;
+  }
+  if (j === 'signout') { await auth.signOut(); joinDlg.close(); toast(t('authSignedOut')); loadPins(); render(); return; }
+  openJoin(j);
+});
+$('#join-body').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target.dataset.form;
+  const v = (id) => ($(`#${id}`)?.value || '').trim();
+  const btn = e.target.querySelector('[type=submit]');
+  if (btn) btn.disabled = true;
+  try {
+    if (f === 'register') {
+      const name = cleanName(v('j-name'));
+      if (!name) { openJoin('register', t('authBadName')); return; }
+      if (v('j-pw').length < 8) { openJoin('register', t('authPwShort')); return; }
+      const out = await auth.register(v('j-email'), $('#j-pw').value, name);
+      if (out === 'signed-in') { toast(t('authSignedIn').replace('{n}', name)); finishJoin('member'); loadPins(); }
+      else {
+        // they can read and post anonymously until they confirm the email
+        auth.setChoice('member');
+        const n = joinNext; joinNext = null;
+        if (n) n();
+        openJoin('confirm', t('authConfirm'));
+      }
+    } else if (f === 'signin') {
+      await auth.signIn(v('j-email'), $('#j-pw').value);
+      toast(t('authSignedIn').replace('{n}', auth.displayName() || t('commMember')));
+      finishJoin('member'); loadPins();
+    } else if (f === 'forgot') {
+      await auth.forgot(v('j-email'));
+      openJoin('sent', t('authLinkSent'));
+    } else if (f === 'newpw') {
+      if ($('#j-pw').value.length < 8) { openJoin('newpw', t('authPwShort')); return; }
+      await auth.newPassword($('#j-pw').value);
+      joinDlg.close(); toast(t('authPwSaved'));
+    } else if (f === 'rename') {
+      const name = cleanName(v('j-name'));
+      if (!name) { openJoin('account', t('authBadName')); return; }
+      await auth.rename(name);
+      joinDlg.close(); toast(t('authSaved')); render();
+    }
+  } catch (err) {
+    openJoin(f === 'rename' ? 'account' : f, authErr(err));
+  } finally { if (btn) btn.disabled = false; }
+});
+auth.onChange((u, evt) => {
+  if (evt === 'PASSWORD_RECOVERY') { openJoin('newpw'); return; }
+  if ((evt === 'SIGNED_IN' || evt === 'INITIAL_SESSION') && u && /[?&#](code|access_token)=/.test(location.href)) {
+    // back from Google or an email link: tidy the address bar and welcome them
+    history.replaceState(null, '', location.pathname);
+    auth.setChoice('member');
+    toast(t('authSignedIn').replace('{n}', auth.displayName(u) || t('commMember')));
+  }
+  if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT' || (evt === 'INITIAL_SESSION' && u)) loadPins();
+  if (S.tab === 'alerts' || S.tab === 'news') render();
+});
+
+async function discussNews(n) {
+  try {
+    const tp = await shareNews(n);
+    openThread(tp.pinId);
+  } catch (err) {
+    toast(t(err.message === 'rate' ? 'commRate' : 'discussFailed'));
+  }
+}
 // ---------------------------------------------------------------- live news (environment & nature)
 async function loadNews(force = false) {
   if (!force && (S.newsStatus === 'loading' || (S.news.length && Date.now() - S.newsAt < 10 * 60e3))) return;
@@ -1975,7 +2164,8 @@ function viewNews() {
     if (k !== 'all' && !n) return '';
     return `<button class="chip sm" data-news-topic="${k}" aria-pressed="${S.newsTopic === k}">${k === 'all' ? t('allTopics') : t(`topic_${k}`)} ${n}</button>`;
   }).join('');
-  const rows = list.length ? `<ul class="news-list">${list.map((n) => `<li><a class="news-row" href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">
+  newsShown = list;
+  const rows = list.length ? `<ul class="news-list">${list.map((n, i) => `<li><a class="news-row" href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">
       <span class="mid">
         <span class="news-tag t-${esc(n.topic)}">${icon(NEWS_ICON[n.topic] || 'leaf')}${t(`topic_${n.topic}`)}${n.region === 'my' ? ' · Malaysia' : ''}</span>
         <b>${esc(n.title)}</b>
@@ -1983,7 +2173,7 @@ function viewNews() {
         <small>${esc(n.source)}${n.time ? ` · ${esc(fmtAgo(n.time, lang))}` : ''}</small>
       </span>
       ${n.image ? `<img src="${esc(n.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
-    </a></li>`).join('')}</ul>` : `<div class="empty-state">${icon('leaf')}${t('newsNone')}</div>`;
+    </a>${pinsMod.shared ? `<button type="button" class="discuss" data-action="discuss" data-i="${i}">${icon('chat')}${t('discuss')}</button>` : ''}</li>`).join('')}</ul>` : `<div class="empty-state">${icon('leaf')}${t('newsNone')}</div>`;
   return `${head}<div class="filters" role="group">${regions}</div><div class="filters topics" role="group">${topics}</div>${rows}<div class="sub-card"><span class="sub-ic">${icon('mail')}</span><span class="mid"><b>${t('subTitle')}</b><small>${t('subCard')}</small></span><button class="btn sm" data-action="subscribe">${t('subBtn')}</button></div><p class="source">${t('newsSource')}</p>`;
 }
 
@@ -2091,7 +2281,12 @@ document.addEventListener('click', (e) => {
   if (el.dataset.cat) { loadPlaces(S.cat === el.dataset.cat && S.tab === 'explore' ? null : el.dataset.cat); return; }
   if (el.dataset.newsRegion) { S.newsRegion = el.dataset.newsRegion; render(); return; }
   if (el.dataset.newsTopic) { S.newsTopic = el.dataset.newsTopic; render(); return; }
-  if (el.dataset.filter) { S.alertFilter = el.dataset.filter; S.thread = null; render(); return; }
+  if (el.dataset.filter) {
+    const f = el.dataset.filter;
+    const go = () => { S.alertFilter = f; S.thread = null; render(); };
+    if (f === 'report') gate(go); else go();
+    return;
+  }
   if (el.dataset.route) { S.routeIdx = Number(el.dataset.route); drawRoutes(); render(); return; }
   if (el.dataset.alert) {
     const a = allAlerts().find((x) => x.id === el.dataset.alert);
@@ -2127,7 +2322,10 @@ document.addEventListener('click', (e) => {
   if (act === 'ride') bookRide(el.dataset.app);
   if (act === 'leave-now') { S.leaveAt = ''; if (S.dest) computeRoute(); }
   if (act === 'pin-weather') openPinDialog();
-  if (act === 'thread') { openThread(el.dataset.pin); return; }
+  if (act === 'thread') { const id = el.dataset.pin; gate(() => openThread(id)); return; }
+  if (act === 'discuss') { const n = newsShown[Number(el.dataset.i)]; if (n) gate(() => discussNews(n)); return; }
+  if (act === 'join') { openJoin('start'); return; }
+  if (act === 'account') { openJoin('account'); return; }
   if (act === 'thread-back') { S.thread = null; S.alertFilter = 'report'; render(); return; }
   if (act === 'thread-retry' && S.thread) { S.thread.status = 'loading'; render(); loadThread(); }
   if (act === 'cm-tag' && S.thread) {

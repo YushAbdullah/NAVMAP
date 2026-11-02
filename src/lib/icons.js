@@ -1,5 +1,8 @@
 // Outline icons (24px grid, stroke-based). Returns inline SVG strings.
 const P = {
+  news: '<path d="M4 5h13v14a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v10a2 2 0 0 1-2 2"/><path d="M7 9h7M7 13h7M7 17h4"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  share: '<path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13"/>',
   ev: '<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/>',
   fuel: '<path d="M3 22V4a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v18M3 22h11M3 10h11M14 8h2a2 2 0 0 1 2 2v7a2 2 0 0 0 4 0V8l-3-3"/>',
   food: '<path d="M4 10a8 5 0 0 1 16 0zM3 14h18M5 18h14a2 2 0 0 1-2 3H7a2 2 0 0 1-2-3z"/>',

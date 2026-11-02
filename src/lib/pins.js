@@ -4,6 +4,7 @@
 import { PIN_BY_ID } from './pin-types.js';
 import { staleness } from './pin-trust.js';
 import { TAG_BY_ID } from './community.js';
+import { authHeader } from './auth.js';
 
 const TOKEN_KEY = 'navmap.device';
 const LOCAL_KEY = 'navmap.pins.local.v1';
@@ -34,6 +35,12 @@ function writeVote(id, v, liveIds) {
   } catch { /* ignore */ }
 }
 
+/** Request headers: the device code, plus the member's sign-in token when signed in. */
+async function hdrs(json = false) {
+  return { ...(json ? { 'content-type': 'application/json' } : {}), 'x-navmap-token': token(), ...(await authHeader().catch(() => ({}))) };
+}
+
+export let topics = [];   // news discussions (see shareNews)
 export let shared = null; // true = everyone sees pins; false = device only; null = unknown yet
 
 /** Pin -> the alert shape the rest of the app understands. */
@@ -53,11 +60,12 @@ export function toAlert(p) {
 
 export async function listPins() {
   try {
-    const r = await fetch('/api/pins', { headers: { 'x-navmap-token': token() } });
+    const r = await fetch('/api/pins', { headers: await hdrs() });
     const d = (r.headers.get('content-type') || '').includes('json') ? await r.json() : null;
     if (r.ok && d?.configured) {
       shared = true;
       writeVote('', null, new Set(d.pins.map((p) => p.id))); // forget votes on pins that are gone
+      topics = (d.topics || []).map(toTopic);
       return d.pins.filter(alive).map(toAlert); // a saved (offline) copy may hold expired pins
     }
   } catch { /* fall through */ }
@@ -71,7 +79,7 @@ export async function addPin(type, lat, lon, note = '') {
   if (shared !== false) {
     try {
       const r = await fetch('/api/pins', {
-        method: 'POST', headers: { 'content-type': 'application/json', 'x-navmap-token': token() },
+        method: 'POST', headers: await hdrs(true),
         body: JSON.stringify({ type, lat, lon, ...(note ? { note } : {}) }),
       });
       const d = await r.json().catch(() => null);
@@ -102,7 +110,7 @@ export async function removePin(pinId) {
     writeLocal(readLocal().filter((p) => p.id !== pinId));
     return true;
   }
-  const r = await fetch(`/api/pins?id=${encodeURIComponent(pinId)}`, { method: 'DELETE', headers: { 'x-navmap-token': token() } });
+  const r = await fetch(`/api/pins?id=${encodeURIComponent(pinId)}`, { method: 'DELETE', headers: await hdrs() });
   return r.ok;
 }
 
@@ -112,7 +120,7 @@ export async function removePin(pinId) {
  */
 export async function votePin(pinId, vote) {
   const r = await fetch('/api/pins', {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-navmap-token': token() },
+    method: 'POST', headers: await hdrs(true),
     body: JSON.stringify({ id: pinId, vote }),
   });
   const d = await r.json().catch(() => null);
@@ -125,10 +133,27 @@ export async function votePin(pinId, vote) {
 }
 
 // ---------------------------------------------------------------- community updates on a pin
-const send = (method, url, body) => fetch(url, {
-  method, headers: { 'content-type': 'application/json', 'x-navmap-token': token() },
+const send = async (method, url, body) => fetch(url, {
+  method, headers: await hdrs(true),
   ...(body ? { body: JSON.stringify(body) } : {}),
 });
+
+/** A news discussion in the same shape the feed uses for pins. */
+export function toTopic(x) {
+  return {
+    id: `topic-${x.id}`, pinId: x.id, kind: 'topic', icon: 'news', severity: 'info', title: x.title, url: x.url, source: x.source,
+    time: x.createdAt, expiresAt: x.expiresAt, comments: x.comments || 0, last: x.last || null,
+    lastActivityAt: x.lastActivityAt || x.createdAt, mine: !!x.mine,
+  };
+}
+
+/** Start (or open the existing) discussion about a news story. Resolves to the topic. */
+export async function shareNews(item) {
+  const d = await json(await send('POST', '/api/pins', { topic: { url: item.link, title: item.title, source: item.source } }));
+  const tp = toTopic(d.topic);
+  topics = [...topics.filter((x) => x.pinId !== tp.pinId), tp];
+  return tp;
+}
 async function json(r) {
   const d = await r.json().catch(() => null);
   if (r.status === 429) throw new Error(d?.error === 'slow' ? 'slow' : 'rate');
@@ -140,7 +165,12 @@ async function json(r) {
 
 /** One pin with its updates: { alert, comments }. */
 export async function getThread(pinId) {
-  const d = await json(await fetch(`/api/pins?thread=${encodeURIComponent(pinId)}`, { headers: { 'x-navmap-token': token() } }));
+  const d = await json(await fetch(`/api/pins?thread=${encodeURIComponent(pinId)}`, { headers: await hdrs() }));
+  if (d.topic) {
+    const tp = toTopic(d.topic);
+    topics = topics.map((x) => (x.pinId === tp.pinId ? tp : x));
+    return { alert: tp, comments: d.comments || [] };
+  }
   return { alert: toAlert(d.pin), comments: d.comments || [] };
 }
 
@@ -149,6 +179,11 @@ export async function postComment(pinId, { text = '', tag = null }) {
   const d = await json(await send('POST', '/api/pins', { id: pinId, comment: { text, tag } }));
   if (d.removed) return { removed: true };
   const vote = TAG_BY_ID[tag]?.vote;
+  if (d.topic) {
+    const tp = toTopic(d.topic);
+    topics = topics.map((x) => (x.pinId === tp.pinId ? tp : x));
+    return { comment: d.comment, alert: tp };
+  }
   if (vote && d.pin && !d.pin.mine) writeVote(pinId, vote);
   return { comment: d.comment, alert: d.pin ? toAlert(d.pin) : null };
 }
