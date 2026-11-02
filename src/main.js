@@ -28,6 +28,7 @@ import { getSaved, setSaved, savedKindAt, SAVED_KINDS } from './lib/saved.js';
 import { LOGO_CATS, logoUrl } from './lib/brands.js';
 import { fetchWeather, wmo, aqiLabel, AQ_LEVELS, placeName, radarFrames } from './lib/weather.js';
 import { HOTLINE_GROUPS } from './lib/hotlines.js';
+import * as radio from './lib/radio.js';
 
 const MAP_STYLE = import.meta.env.VITE_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
 const ALERT_REFRESH_MS = 5 * 60 * 1000;
@@ -1023,6 +1024,94 @@ document.addEventListener('click', (e) => {
 $('#voice-close').addEventListener('click', () => voiceDlg.close());
 $('#hud-voice-pick').addEventListener('click', openVoiceDialog);
 if (voiceSupported()) speechSynthesis.addEventListener?.('voiceschanged', () => { if (voiceDlg.open) renderVoiceDialog(); });
+
+// ---------------------------------------------------------------- free radio
+const radioDlg = $('#radio-dlg');
+let radioQ = '';
+const stIcon = (st) => st.favicon
+  ? `<img src="${esc(st.favicon)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'st-ph',textContent:'${esc(st.name.slice(0, 1).toUpperCase())}'}))">`
+  : `<span class="st-ph">${esc(st.name.slice(0, 1).toUpperCase())}</span>`;
+const PLAY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z" fill="currentColor"/></svg>';
+const STOP_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>';
+const STAR_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>';
+
+function renderRadioNow() {
+  const { current, status, volume } = radio.radioState();
+  const on = status === 'playing' || status === 'loading';
+  const sub = status === 'playing' ? t('radioLive') : status === 'loading' ? t('radioConnecting') : status === 'error' ? t('radioError') : current ? t('radioPaused') : t('radioPick');
+  $('#radio-now').innerHTML = `<div class="rn-card${on ? ' on' : ''}">
+      ${current ? stIcon(current) : `<span class="st-ph">FM</span>`}
+      <span class="mid"><b>${esc(current?.name || t('radioTitle'))}</b><small class="${status === 'error' ? 'err' : ''}">${status === 'playing' ? '<span class="rn-dot"></span>' : ''}${esc(sub)}</small></span>
+      <button class="rn-play" data-radio="toggle" ${current ? '' : 'disabled'} aria-label="${esc(on ? t('radioStop') : t('radioPlay'))}">${on ? STOP_SVG : PLAY_SVG}</button>
+    </div>
+    <label class="rn-vol"><span class="sr-only">${t('radioVolume')}</span>${icon('sound')}<input type="range" id="radio-vol" min="5" max="100" value="${Math.round(volume * 100)}"></label>`;
+}
+function renderRadioList() {
+  const { stations, current, status, loaded, listFailed } = radio.radioState();
+  const body = $('#radio-body');
+  if (!loaded) {
+    body.innerHTML = listFailed ? `<p class="muted">${t('radioListFailed')}</p>` : `<p class="muted"><span class="spinner"></span> ${t('radioLoading')}</p>`;
+    return;
+  }
+  const q = radioQ.trim().toLowerCase();
+  const match = (st) => !q || `${st.name} ${st.tags.join(' ')} ${st.state}`.toLowerCase().includes(q);
+  const row = (st) => {
+    const playing = current?.id === st.id && (status === 'playing' || status === 'loading');
+    const meta = [st.state, ...st.tags.slice(0, 2)].filter(Boolean).join(' · ');
+    return `<li class="st-row${playing ? ' on' : ''}">
+      <button class="st-main" data-radio-play="${esc(st.id)}" aria-pressed="${playing}">${stIcon(st)}
+        <span class="mid"><b>${esc(st.name)}</b>${meta ? `<small>${esc(meta)}</small>` : ''}</span>
+        ${playing ? '<span class="eq on" aria-hidden="true"><i></i><i></i><i></i></span>' : ''}</button>
+      <button class="st-fav" data-radio-fav="${esc(st.id)}" aria-pressed="${radio.isFav(st.id)}" aria-label="${esc(t('radioFav'))}">${STAR_SVG}</button>
+    </li>`;
+  };
+  const list = stations.filter(match);
+  const favs = list.filter((x) => radio.isFav(x.id));
+  const rtm = list.filter((x) => x.rtm && !radio.isFav(x.id));
+  const rest = list.filter((x) => !x.rtm && !radio.isFav(x.id));
+  const group = (title, arr) => arr.length ? `<h3>${title}</h3><ul class="st-list">${arr.map(row).join('')}</ul>` : '';
+  body.innerHTML = (list.length ? group(t('radioFavs'), favs) + group(t('radioRtm'), rtm) + group(t('radioPopular'), rest) : `<p class="muted">${t('radioNone')}</p>`)
+    + `<p class="muted sm">${t('radioNote')}</p>`;
+}
+function syncRadioBtns() {
+  const { current, status } = radio.radioState();
+  const on = status === 'playing' || status === 'loading';
+  for (const b of [$('#radio-btn'), $('#hud-radio')]) {
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
+  $('#radio-btn').setAttribute('aria-label', on && current ? `${t('radioTitle')}: ${current.name}` : t('radioTitle'));
+  $('#hud-radio').setAttribute('aria-label', on ? t('radioStop') : t('radioPlay'));
+}
+function openRadio() {
+  radioQ = ''; $('#radio-q').value = '';
+  renderRadioNow(); renderRadioList();
+  radioDlg.showModal();
+  radio.loadStations();
+}
+radio.onRadioChange(() => {
+  syncRadioBtns();
+  if (radioDlg.open) { renderRadioNow(); renderRadioList(); }
+  if (radio.radioState().status === 'error') toast(t('radioError'));
+});
+$('#radio-btn').addEventListener('click', openRadio);
+$('#radio-close').addEventListener('click', () => radioDlg.close());
+radioDlg.addEventListener('click', (e) => { if (e.target === radioDlg) radioDlg.close(); });
+$('#hud-radio').addEventListener('click', () => { if (radio.radioState().current) radio.toggle(); else openRadio(); });
+$('#radio-q').addEventListener('input', (e) => { radioQ = e.target.value; renderRadioList(); });
+radioDlg.addEventListener('input', (e) => { if (e.target.id === 'radio-vol') radio.setVolume(e.target.value / 100); });
+radioDlg.addEventListener('click', (e) => {
+  if (e.target.closest('[data-radio="toggle"]')) { radio.toggle(); return; }
+  const fav = e.target.closest('[data-radio-fav]');
+  if (fav) { radio.toggleFav(fav.dataset.radioFav); return; }
+  const pl = e.target.closest('[data-radio-play]');
+  if (pl) {
+    const st = radio.radioState().stations.find((x) => x.id === pl.dataset.radioPlay);
+    const { current, status } = radio.radioState();
+    if (st && current?.id === st.id && (status === 'playing' || status === 'loading')) radio.stop(); else radio.play(st);
+  }
+});
+syncRadioBtns();
 
 function syncVoiceBtn() {
   const b = $('#hud-voice');
