@@ -8,6 +8,7 @@ import { distKm, distToLineKm, fmtDist, fmtDur, fmtAgo, circle, KL, MY_BBOX } fr
 import { CATEGORIES, fetchNearby, prefetchNearby, raceOverpass } from './lib/places.js';
 import { searchPlaces, reverseName } from './lib/search.js';
 import { getRoutes, stepText } from './lib/routing.js';
+import { pickTollVias, bestTollRoute } from './lib/tolls.js';
 import { getTransit, clock, delayMin, isWalk, isRail, TZ } from './lib/transit.js';
 import { RIDE_APPS, openRide, gmapsTransit } from './lib/rides.js';
 import { getVehicle, setVehicle, loadFuelPrices, FUEL_DEFAULT, EV_RATE, tollEstimate, fuelEstimate, evEstimate, transitFare, grabFare, rm } from './lib/tripcost.js';
@@ -296,28 +297,34 @@ async function withNoToll(from, to, signal) {
   return [...main.slice(0, 2), tollFree];
 }
 
+/** Points every ~2 km along Malaysia's tolled expressways, built weekly from OpenStreetMap (scripts/build-tolls.mjs). */
+let tollPts = null;
+async function loadTollPoints() {
+  if (tollPts) return tollPts;
+  try { tollPts = (await (await fetch('/data/tolls.json')).json()).points || []; } catch { tollPts = []; }
+  return tollPts;
+}
+
 /**
- * The fastest route has no tolls: look for one that uses a toll expressway anyway, so the driver can choose.
- * OSRM cannot be told to prefer tolls, so we find tolled motorways near the trip (OpenStreetMap toll=yes)
- * and route through the best-placed ones, keeping the quickest that really uses a toll road.
+ * The fastest route has no tolls: find one that uses a toll expressway anyway, so the driver can choose.
+ * OSRM cannot be told to prefer tolls, so we route through points on the expressways nearest the trip
+ * (fewest extra kilometres first, a few different roads) and keep the quickest result that really uses one.
  */
 async function addTollRoute(routes, from, to, signal) {
   const direct = distKm(from, to);
   if (direct < 3) { S.tollSearch = 'none'; return; }
   S.tollSearch = 'loading';
-  const mid = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
-  const radius = Math.round(Math.min(direct / 2 + 5, 40) * 1000);
   try {
-    const json = await raceOverpass(`[out:json][timeout:15];way[toll=yes][highway~"^(motorway|trunk)$"](around:${radius},${mid[1]},${mid[0]});out center 300;`, { signal, timeoutMs: 12000 });
-    const cands = json.elements.filter((e) => e.center).map((e) => {
-      const c = [e.center.lon, e.center.lat];
-      return { c, detour: distKm(from, c) + distKm(c, to) - direct };
-    }).filter((x) => x.detour < direct * 0.4 + 3).sort((a, b) => a.detour - b.detour);
-    // Spread the tries: skip candidates within 2 km of one already chosen.
-    const picks = [];
-    for (const x of cands) { if (picks.every((p) => distKm(p.c, x.c) > 2)) picks.push(x); if (picks.length === 3) break; }
-    const tries = await Promise.all(picks.map((p) => getRoutes(from, to, signal, { via: p.c }).then((r) => r[0]).catch(() => null)));
-    const best = tries.filter((r) => r?.tolls?.length && r.duration < routes[0].duration * 1.6).sort((a, b) => a.duration - b.duration)[0];
+    let vias = pickTollVias(await loadTollPoints(), from, to);
+    if (!vias.length) {
+      // No prebuilt points here yet: ask OpenStreetMap live for expressways (E-numbered or toll=yes) near the trip.
+      const mid = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+      const radius = Math.round(Math.min(direct / 2 + 5, 40) * 1000);
+      const json = await raceOverpass(`[out:json][timeout:15];(way[highway~"^(motorway|trunk)$"][ref~"(^|;)E[0-9]"](around:${radius},${mid[1]},${mid[0]});way[highway~"^(motorway|trunk)$"][toll=yes](around:${radius},${mid[1]},${mid[0]}););out tags center 300;`, { signal, timeoutMs: 12000 });
+      vias = pickTollVias(json.elements.filter((e) => e.center && e.tags?.toll !== 'no').map((e) => [e.center.lon, e.center.lat, e.tags?.ref || '']), from, to);
+    }
+    const tries = await Promise.all(vias.map((c) => getRoutes(from, to, signal, { via: c }).then((r) => r[0]).catch(() => null)));
+    const best = bestTollRoute(tries, routes[0]);
     if (signal.aborted || S.routes !== routes) return;
     if (!best) { S.tollSearch = 'none'; } else {
       best.withToll = true;
@@ -450,7 +457,29 @@ async function onVote(pinId, v) {
   drawAlerts(); renderBanner(); render();
 }
 
+// Toll icons on the map: one where each route joins a toll road, with the estimated toll for that stretch.
+let tollMarkers = [];
+function drawTollMarkers() {
+  tollMarkers.forEach((m) => m.remove());
+  tollMarkers = [];
+  if (isTransit()) return;
+  S.routes.forEach((r, i) => {
+    for (const s of r.tolls || []) {
+      if (!s.at) continue;
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = `toll-pin${i === S.routeIdx ? ' sel' : ''}`;
+      el.dataset.route = String(i);
+      el.innerHTML = `<b>TOL</b><span>${rm(tollEstimate([s], S.mode).rm)}</span>`;
+      el.setAttribute('aria-label', `${t('tollShort')} ${s.name || ''} ${rm(tollEstimate([s], S.mode).rm)}`);
+      el.title = `${s.name || t('tollShort')} · ${fmtDist(s.km)}`;
+      tollMarkers.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(s.at).addTo(map));
+    }
+  });
+}
+
 async function drawRoutes() {
+  drawTollMarkers(); // DOM markers need no map style
   await mapReady;
   const sel = S.routes[S.routeIdx];
   // A bus or train trip is drawn leg by leg on its own layers; the plain route line only shows the other choices.

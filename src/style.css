@@ -696,3 +696,7 @@ button.acard-head { cursor: pointer; }
 .me.nav-car .car-arrow path { fill: #2D7FF9; stroke: #fff; stroke-width: 3; stroke-linejoin: round; }
 .recentre { position: absolute; z-index: 7; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px; border: 0; border-radius: 9999px; background: var(--ink); color: var(--primary); font-weight: 600; font-size: 15px; box-shadow: var(--e2); }
 .recentre[hidden] { display: none; }
+.toll-pin { display: flex; align-items: center; gap: 4px; padding: 3px 7px 3px 4px; border: 2px solid #fff; border-radius: 8px; background: #8A99A0; color: #fff; font-size: 12px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,.25); cursor: pointer; }
+.toll-pin b { padding: 1px 4px; border-radius: 4px; background: #F2B705; color: #1A1A1A; font-size: 10px; letter-spacing: .04em; }
+.toll-pin.sel { background: #003503; z-index: 2; }
+body.navigating .toll-pin:not(.sel) { display: none; }

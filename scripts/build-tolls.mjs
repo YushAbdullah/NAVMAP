@@ -9,13 +9,13 @@ const STEP_KM = 2;
 
 async function query(q) {
   let lastErr;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     for (const url of OVERPASS) {
       try {
         const res = await fetch(url, {
           method: 'POST', body: new URLSearchParams({ data: q }),
           headers: { 'user-agent': 'NAVMAP data build (https://github.com/YushAbdullah/NAVMAP)' },
-          signal: AbortSignal.timeout(300_000),
+          signal: AbortSignal.timeout(200_000),
         });
         if (!res.ok) throw new Error(`${url} ${res.status}`);
         const json = await res.json();
@@ -36,7 +36,7 @@ const km = (a, b) => {
 };
 
 // Malaysian expressways carry an "E" route number (E1 PLUS, E11 LDP, E5 KESAS, E35 Guthrie, …); nearly all charge tolls.
-const ways = await query(`[out:json][timeout:280];area(id:${MALAYSIA_AREA})->.my;(way[highway=motorway][ref~"(^|;)E[0-9]"](area.my);way[highway~"^(motorway|trunk)$"][toll=yes](area.my););out tags geom;`);
+const ways = await query(`[out:json][timeout:190];area(id:${MALAYSIA_AREA})->.my;(way[highway=motorway][ref~"(^|;)E[0-9]"](area.my);way[highway~"^(motorway|trunk)$"][toll=yes](area.my););out tags geom;`);
 const pts = [];
 for (const w of ways) {
   if (w.tags?.toll === 'no' || !w.geometry?.length) continue;
