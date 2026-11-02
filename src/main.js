@@ -29,7 +29,6 @@ import { LOGO_CATS, logoUrl } from './lib/brands.js';
 import { fetchWeather, wmo, aqiLabel, AQ_LEVELS, placeName, radarFrames } from './lib/weather.js';
 import { HOTLINE_GROUPS } from './lib/hotlines.js';
 import { aboutHtml } from './lib/about.js';
-import * as radio from './lib/radio.js';
 
 const MAP_STYLE = import.meta.env.VITE_MAP_STYLE || 'https://tiles.openfreemap.org/styles/positron';
 const ALERT_REFRESH_MS = 5 * 60 * 1000;
@@ -1296,7 +1295,7 @@ function viewDrive() {
   // Live turn-by-turn follows GPS, so it needs the route to begin where the user is.
   const go = S.start
     ? `<p class="muted pt-note">${t('previewOnly')}</p><button class="btn-ghost" data-action="pt-reset-start">${icon('nav')}${t('navFromMe')}</button>`
-    : `<button class="btn" data-action="start-nav">${icon('nav')}${t('start')}</button><div class="chip-row">${voiceChip()}${radioChip()}</div>`;
+    : `<button class="btn" data-action="start-nav">${icon('nav')}${t('start')}</button>${voiceChip()}`;
   return `${pts}
     <div class="summary"><b>${fmtDur(r.duration, lang)}</b><span>${fmtDist(r.distance / 1000)}${r.via ? ` · ${t('via')} ${esc(r.via)}` : ''}</span></div>
     ${tollBar()}${alts}${warn}
@@ -2391,7 +2390,6 @@ document.addEventListener('click', (e) => {
   if (act === 'news-retry') loadNews(true);
   if (act === 'subscribe') openSubscribe();
   if (act === 'about') openAbout();
-  if (act === 'radio') openRadio();
   if (act === 'aq-pharmacy') loadPlaces('pharmacy');
   if (act === 'poll-jump') $('#poll')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
@@ -2701,90 +2699,6 @@ aboutDlg.addEventListener('click', (e) => {
 });
 aboutDlg.addEventListener('close', () => { if (location.hash === '#about') history.replaceState(null, '', location.pathname + location.search); });
 
-// ---------------------------------------------------------------- free radio
-const radioDlg = $('#radio-dlg');
-const RADIO = { list: null, status: 'idle', q: '' };
-function radioChip() {
-  const { station, status } = radio.radioState();
-  const on = status === 'playing' || status === 'loading';
-  return `<button class="voice-chip${on ? ' on' : ''}" data-action="radio">${icon('radio')}<span>${on && station ? `<b>${esc(station.name)}</b>` : t('radioCard')}</span></button>`;
-}
-const stationLogo = (s) => `<span class="rd-logo">${icon('radio')}${s.logo ? `<img src="${esc(s.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
-function renderRadioNow() {
-  const { station, status, last } = radio.radioState();
-  const s = station || last;
-  if (!s) { $('#radio-now').innerHTML = ''; return; }
-  const playing = status === 'playing' || status === 'loading';
-  const label = !station ? t('radioLast') : status === 'loading' ? t('radioBuffering') : status === 'playing' ? t('radioLive') : status === 'error' ? t('radioErr') : t('radioPaused');
-  $('#radio-now').innerHTML = `<div class="rd-now${status === 'error' ? ' err' : ''}${playing ? ' on' : ''}">
-    ${stationLogo(s)}
-    <span class="mid"><b>${esc(s.name)}</b><small>${status === 'playing' ? '<i class="live-dot"></i>' : ''}${esc(label)}</small></span>
-    <button class="rd-big" data-radio="${playing ? 'pause' : 'resume'}" aria-label="${t(playing ? 'radioPause' : 'radioPlay')}">${icon(playing ? 'pause' : 'play')}</button>
-    ${station ? `<button class="icon-btn" data-radio="stop" aria-label="${t('radioStop')}">${icon('close')}</button>` : ''}
-  </div>`;
-}
-function renderRadioList() {
-  const box = $('#radio-list');
-  if (!box) return;
-  if (RADIO.status === 'loading') { box.innerHTML = `<div class="empty-state"><span class="spinner"></span>${t('radioLoading')}</div>`; return; }
-  if (RADIO.status === 'error') { box.innerHTML = `<div class="empty-state">${icon('radio')}${t('radioFailed')}<button class="btn-ghost" data-radio="retry">${t('retry')}</button></div>`; return; }
-  const cur = radio.radioState().station;
-  const q = RADIO.q.trim().toLowerCase();
-  const list = (RADIO.list || []).filter((s) => !q || s.name.toLowerCase().includes(q) || s.tags.join(' ').includes(q));
-  box.innerHTML = list.length ? `<ul class="rd-list">${list.slice(0, 80).map((s) => `<li><button class="row${cur?.id === s.id ? ' sel' : ''}" data-radio="play" data-id="${esc(s.id)}">
-      ${stationLogo(s)}
-      <span class="mid"><b>${esc(s.name)}</b><small>${esc([s.state, ...s.tags].filter(Boolean).slice(0, 3).join(' · ') || t('inMalaysia'))}</small></span>
-      <span class="end">${cur?.id === s.id ? `<span class="eq on" aria-hidden="true"><i></i><i></i><i></i></span>` : icon('play')}</span>
-    </button></li>`).join('')}</ul>` : `<div class="empty-state">${icon('search')}${t('radioNone')}</div>`;
-}
-async function loadRadio(force = false) {
-  RADIO.status = 'loading'; renderRadioList();
-  try { RADIO.list = await radio.loadStations({ force }); RADIO.status = 'ok'; } catch { RADIO.status = 'error'; }
-  renderRadioList();
-}
-function openRadio() {
-  $('#radio-body').innerHTML = `<p class="muted">${t('radioLead')}</p>
-    <label class="rd-search">${icon('search')}<input id="radio-q" type="search" placeholder="${t('radioSearch')}" aria-label="${t('radioSearch')}" value="${esc(RADIO.q)}" autocomplete="off"></label>
-    <div id="radio-list"></div>
-    <p class="note-card">${icon('car')}<span>${t('radioDrive')}</span></p>
-    <p class="source">${t('radioSource')}</p>`;
-  renderRadioNow();
-  if (RADIO.list) renderRadioList(); else loadRadio();
-  if (!radioDlg.open) radioDlg.showModal();
-}
-function syncRadio() {
-  const { status } = radio.radioState();
-  const fab = $('#radio-btn');
-  fab.classList.toggle('on', status === 'playing');
-  fab.classList.toggle('busy', status === 'loading');
-  fab.setAttribute('aria-pressed', String(status === 'playing' || status === 'loading'));
-  if (radioDlg.open) { renderRadioNow(); renderRadioList(); }
-  if (S.tab === 'drive' && document.querySelector('#sheet-body [data-action="radio"]')) {
-    document.querySelector('#sheet-body [data-action="radio"]').outerHTML = radioChip();
-  }
-  if (status === 'error' && !radioDlg.open) toast(t('radioErr'));
-}
-radio.onRadioChange(syncRadio);
-$('#radio-btn').addEventListener('click', openRadio);
-$('#radio-close').addEventListener('click', () => radioDlg.close());
-radioDlg.addEventListener('input', (e) => { if (e.target.id === 'radio-q') { RADIO.q = e.target.value; renderRadioList(); } });
-radioDlg.addEventListener('click', (e) => {
-  if (e.target === radioDlg) { radioDlg.close(); return; }
-  const b = e.target.closest('[data-radio]');
-  if (!b) return;
-  const a = b.dataset.radio;
-  if (a === 'play') {
-    const s = RADIO.list?.find((x) => x.id === b.dataset.id);
-    if (!s) return;
-    const cur = radio.radioState();
-    if (cur.station?.id === s.id && (cur.status === 'playing' || cur.status === 'loading')) radio.pause(); else radio.play(s);
-  }
-  if (a === 'pause') radio.pause();
-  if (a === 'resume') radio.resume();
-  if (a === 'stop') radio.stop();
-  if (a === 'retry') loadRadio(true);
-});
-
 // ---------------------------------------------------------------- boot
 applyStatic();
 $('#lang-btn').textContent = getLang() === 'en' ? 'BM' : 'EN';
@@ -2799,10 +2713,9 @@ setInterval(() => { if (document.visibilityState === 'visible') loadPins(); }, (
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { loadPins(); loadWeather(); } });
 setTimeout(() => loadWeather(), 1200);
 
-// deep links: #about opens About NAVMAP, #radio the radio
+// deep link: #about opens About NAVMAP
 if (location.hash === '#about') openAbout();
-if (location.hash === '#radio') openRadio();
-addEventListener('hashchange', () => { if (location.hash === '#about') openAbout(); if (location.hash === '#radio') openRadio(); });
+addEventListener('hashchange', () => { if (location.hash === '#about') openAbout(); });
 
 // deep link: ?cat=ev
 const urlCat = new URLSearchParams(location.search).get('cat');
