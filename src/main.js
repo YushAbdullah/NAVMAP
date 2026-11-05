@@ -860,6 +860,7 @@ function startNav({ sim = false } = {}) {
   applyDriveView(map, driveOn(), { play: isPlay() });
   syncViewBtn();
   $('#hud').hidden = false;
+  setHudMin(hudMinPref(), false);
   openCockpit();
   syncVoiceBtn();
   // First announcement happens inside the tap, which unlocks speech on iOS.
@@ -1124,6 +1125,7 @@ function closeCockpit(hide = false) {
 }
 function setCockpitSize(size) {
   ck.size = size;
+  if (size === 'split') setHudMin(true); // two screens: fold the direction card to one line
   layoutCockpit();
   toast(t({ small: 'cockpitSmall', big: 'cockpitBig', split: 'cockpitSplit' }[size]));
 }
@@ -1342,6 +1344,25 @@ function stopNav() {
   if (S.me) drawMe(); else if (wasSim && meMarker) { meMarker.remove(); meMarker = null; }
   map.easeTo({ pitch: isPlay() ? PLAY_PITCH : 0, bearing: 0, zoom: Math.min(map.getZoom(), 16), duration: 600 });
 }
+
+// ---------------------------------------------------------------- direction card: full or one line
+// Folded, it shows only the next turn and distance, leaving more room for the map and the
+// in-car view. Tap the card or the handle to open it again. Remembered on this phone.
+const hudMinPref = () => { try { return localStorage.getItem('navmap.hudMin') === '1'; } catch { return false; } };
+function setHudMin(min, save = true) {
+  if (save) try { localStorage.setItem('navmap.hudMin', min ? '1' : '0'); } catch { /* private mode */ }
+  const hud = $('#hud'), b = $('#hud-min');
+  hud.classList.toggle('min', min);
+  b.setAttribute('aria-expanded', String(!min));
+  b.setAttribute('aria-label', t(min ? 'hudExpand' : 'hudMinimise'));
+  if (!S.nav) return;
+  requestAnimationFrame(() => {
+    placeCockpit();
+    if (S.nav?.follow) map.easeTo({ padding: navPadding(), duration: 400 });
+  });
+}
+$('#hud-min').addEventListener('click', (e) => { e.stopPropagation(); setHudMin(!$('#hud').classList.contains('min')); });
+$('#hud').addEventListener('click', (e) => { if ($('#hud').classList.contains('min') && !e.target.closest('button')) setHudMin(false); });
 
 // ---------------------------------------------------------------- drive view and route simulator
 S.driveView = getDriveView();

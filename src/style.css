@@ -978,3 +978,17 @@ body.ck-split.simulating .toast { bottom: calc(48% + 84px); }
 .cockpit-show { position: absolute; z-index: 6; left: 16px; top: 280px; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border: 0; border-radius: 9999px; background: var(--ink); color: var(--primary); font-weight: 600; font-size: 13px; box-shadow: var(--e2); }
 .cockpit-show svg { width: 18px; height: 18px; }
 @media (min-width: 900px) { .cockpit-show, .cockpit.small:not([style*="left"]) { left: auto; right: 24px; } .cockpit.small { width: 300px; } .cockpit.big { left: auto; right: 24px; width: 520px; } .cockpit.split { height: 45%; } }
+
+/* ---------------------------------------------------------------- direction card folded to one line */
+.hud-min { align-self: center; width: 64px; height: 20px; margin: -6px 0 -10px; border: 0; background: none; color: #B9C9BC; display: grid; place-items: center; }
+.hud-min svg { width: 22px; height: 18px; stroke-width: 2.4; transition: transform .2s; }
+.hud.min { padding: 8px 12px 6px; gap: 4px; cursor: pointer; }
+.hud.min .hud-voice, .hud.min .hud-road, .hud.min .hud-haz, .hud.min .hud-toll, .hud.min .hud-meta { display: none; }
+.hud.min .hud-step { gap: 10px; }
+.hud.min .hud-ic { width: 36px; height: 36px; border-radius: 10px; }
+.hud.min .hud-ic svg { width: 22px; height: 22px; }
+.hud.min .hud-main { display: flex; align-items: baseline; gap: 8px; }
+.hud.min .hud-step b { font-size: 20px; flex: none; }
+.hud.min .hud-step span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.hud.min .hud-min { margin: -2px 0 -4px; height: 16px; }
+.hud.min .hud-min svg { transform: rotate(180deg); }
