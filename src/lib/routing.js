@@ -104,20 +104,30 @@ export function fromValhalla(trip) {
   };
 }
 
-/** Routes that keep off toll roads (Valhalla use_tolls 0). Throws when the server can't be reached. */
+/**
+ * Routes that keep off toll roads. Valhalla avoids roads tagged toll=yes, but some Malaysian expressways
+ * (e.g. LDP E11) only have toll plazas tagged, so when every result still uses an E-numbered expressway we ask
+ * again keeping off motorways too (in Malaysia nearly all motorways are tolled). Throws when unreachable.
+ */
 export async function getNoTollRoutes(from, to, signal, opts = {}) {
-  const body = {
-    locations: [from, to].map(([lon, lat], i) => (i === 0 && Number.isFinite(opts.bearing)
-      ? { lon, lat, heading: Math.round((opts.bearing + 360) % 360), heading_tolerance: 60 } : { lon, lat })),
-    costing: 'auto',
-    costing_options: { auto: { use_tolls: 0 } },
-    units: 'kilometers', alternates: opts.single ? 0 : 1, directions_type: 'maneuvers',
+  const ask = async (auto) => {
+    const body = {
+      locations: [from, to].map(([lon, lat], i) => (i === 0 && Number.isFinite(opts.bearing)
+        ? { lon, lat, heading: Math.round((opts.bearing + 360) % 360), heading_tolerance: 60 } : { lon, lat })),
+      costing: 'auto',
+      costing_options: { auto },
+      units: 'kilometers', alternates: opts.single ? 0 : 1, directions_type: 'maneuvers',
+    };
+    const res = await fetch(`${VALHALLA}/route?json=${encodeURIComponent(JSON.stringify(body))}`, { signal: timedSignal(signal, opts.timeoutMs || 15000) });
+    if (!res.ok) throw new Error(`Routing ${res.status}`);
+    const json = await res.json();
+    if (!json.trip) throw new Error(json.error || 'No route found');
+    return [json.trip, ...(json.alternates || []).map((a) => a.trip)].filter(Boolean).map(fromValhalla);
   };
-  const res = await fetch(`${VALHALLA}/route?json=${encodeURIComponent(JSON.stringify(body))}`, { signal: timedSignal(signal, opts.timeoutMs || 15000) });
-  if (!res.ok) throw new Error(`Routing ${res.status}`);
-  const json = await res.json();
-  if (!json.trip) throw new Error(json.error || 'No route found');
-  return [json.trip, ...(json.alternates || []).map((a) => a.trip)].filter(Boolean).map(fromValhalla);
+  const first = await ask({ use_tolls: 0 });
+  if (first.some((r) => !r.tolls.length)) return first;
+  const strict = await ask({ use_tolls: 0, use_highways: 0 }).catch(() => []);
+  return [...strict.filter((r) => !r.tolls.length), ...first];
 }
 
 /**
