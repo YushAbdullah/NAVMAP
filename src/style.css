@@ -26,9 +26,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .top { position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 16px; right: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 5; pointer-events: none; }
 .top > * { pointer-events: auto; }
 .search { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 6px 0 16px; background: var(--surface); border-radius: 12px; box-shadow: var(--e2); }
-.brand { display: flex; flex-shrink: 0; }
-.brand i { width: 14px; height: 14px; border-radius: 50%; background: var(--primary); }
-.brand i + i { background: var(--ink); margin-left: -5px; }
+.brand { display: block; flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px; stroke: none; }
 .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 16px; }
 .search input::-webkit-search-cancel-button { cursor: pointer; }
 .icon-btn { width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--surface-tint); color: var(--on-primary); font-weight: 600; font-size: 13px; display: grid; place-items: center; flex-shrink: 0; }
