@@ -22,7 +22,7 @@ import { listPins, addPin, removePin, votePin, getThread, postComment, reactComm
 import { TAGS, DISCUSS_TAGS, TAG_BY_ID, MAX_TEXT, cleanName } from './lib/community.js';
 import * as auth from './lib/auth.js';
 import { applyPlay, PLAY_PITCH } from './lib/play.js';
-import { Cockpit } from './lib/cockpit.js';
+import { Cockpit, SIZES } from './lib/cockpit.js';
 import { applyDriveView, getDriveView, setDriveView, measureRoute, turnTowards, DRIVE_PITCH, FLAT_PITCH, DRIVE_ZOOM, CAR_SVG, SIM_SPEEDS } from './lib/driveview.js';
 import { award, getScore, levelOf, LEVEL_PTS, BADGES } from './lib/score.js';
 import * as pinsMod from './lib/pins.js';
@@ -292,6 +292,9 @@ function navPadding() {
   const hud = $('#hud')?.offsetHeight || 160;
   // Chase camera: the car sits low on the screen, with the road and skyline opening up ahead.
   const k = driveOn() ? 0.4 : 0.28;
+  // Split screen: the in-car view fills the bottom half, so the map's car sits just above it.
+  const split = document.body.classList.contains('ck-split') ? ($('#cockpit')?.offsetHeight || 0) : 0;
+  if (split) return { top: hud + 20, bottom: split + 40, left: 40, right: 40 };
   return { top: Math.min(innerHeight - 160, hud + Math.round(innerHeight * k)), bottom: 40, left: 40, right: 40 };
 }
 /** The 3D drive view is on while navigating (or simulating) and the driver has not switched it off. */
@@ -953,7 +956,7 @@ function onNavPos(pos) {
     const kmh = (pos.coords.speed || 0) * 3.6;
     map.easeTo({ center: S.me, bearing: S.nav.heading, zoom: navZoom(kmh), pitch: navPitch(), padding: navPadding(), duration: 900 });
   }
-  if (!S.nav.sim) { S.nav.kmh = (pos.coords.speed || 0) * 3.6; cockpit?.follow(S.me, S.nav.heading, 900); }
+  if (!S.nav.sim) { S.nav.kmh = (pos.coords.speed || 0) * 3.6; cockpit?.follow(S.me, S.nav.heading, 900, angleDiff(S.nav.heading, routeBearing(r, S.me))); }
   updateHud();
 }
 
@@ -1057,37 +1060,53 @@ function tollAlerts(r, me) {
   });
 }
 
-// ---------------------------------------------------------------- in-car mini screen
+// ---------------------------------------------------------------- in-car screen
+// Small (drag it anywhere), big, or split screen: the map on top and the driver's view below.
 let cockpit = null;
-const getCockpitPref = () => { try { return localStorage.getItem('navmap.cockpit') !== 'off'; } catch { return true; } };
+const ck = {
+  get on() { try { return localStorage.getItem('navmap.cockpit') !== 'off'; } catch { return true; } },
+  set on(v) { try { localStorage.setItem('navmap.cockpit', v ? 'on' : 'off'); } catch { /* private mode */ } },
+  get size() { try { const v = localStorage.getItem('navmap.cockpitSize'); return SIZES.includes(v) ? v : 'small'; } catch { return 'small'; } },
+  set size(v) { try { localStorage.setItem('navmap.cockpitSize', v); } catch { /* private mode */ } },
+  get pos() { try { return JSON.parse(localStorage.getItem('navmap.cockpitPos') || 'null'); } catch { return null; } },
+  set pos(v) { try { if (v) localStorage.setItem('navmap.cockpitPos', JSON.stringify(v)); else localStorage.removeItem('navmap.cockpitPos'); } catch { /* private mode */ } },
+};
+const angleDiff = (a, b) => ((((b - a) % 360) + 540) % 360) - 180;
+const EXPAND_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>';
+const SPLIT_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16"/></svg>';
+const SHRINK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4l-6 6M14 5v5h5M4 20l6-6M10 19v-5H5"/></svg>';
+
 function cockpitBox() {
   let b = $('#cockpit');
   if (!b) {
     b = document.createElement('div');
     b.id = 'cockpit'; b.className = 'cockpit'; b.hidden = true;
     b.innerHTML = `<div class="ck-screen" role="img"></div>
-      <button class="ck-close" data-ck="hide">${icon('close')}</button>`;
+      <span class="ck-grip" aria-hidden="true"></span>
+      <div class="ck-btns"><button class="ck-btn" data-ck="size"></button><button class="ck-btn" data-ck="hide">${icon('close')}</button></div>`;
     const pill = document.createElement('button');
     pill.id = 'cockpit-show'; pill.className = 'cockpit-show'; pill.hidden = true; pill.dataset.ck = 'show';
     $('#app').append(b, pill);
     $('#app').addEventListener('click', (e) => {
       const a = e.target.closest('[data-ck]')?.dataset.ck;
       if (!a) return;
-      try { localStorage.setItem('navmap.cockpit', a === 'show' ? 'on' : 'off'); } catch { /* private mode */ }
-      if (a === 'show') openCockpit(); else closeCockpit(true);
+      if (a === 'show') { ck.on = true; openCockpit(); }
+      if (a === 'hide') { ck.on = false; closeCockpit(true); }
+      if (a === 'size') setCockpitSize(SIZES[(SIZES.indexOf(ck.size) + 1) % SIZES.length]);
     });
+    dragCockpit(b);
   }
   return b;
 }
 function openCockpit() {
   const b = cockpitBox(), pill = $('#cockpit-show');
   pill.innerHTML = `${icon('car')}<span>${t('cockpitShow')}</span>`;
-  b.querySelector('.ck-close').setAttribute('aria-label', t('cockpitHide'));
+  b.querySelector('[data-ck="hide"]').setAttribute('aria-label', t('cockpitHide'));
   b.querySelector('.ck-screen').setAttribute('aria-label', t('cockpitTitle'));
   if (!S.nav || isTransit()) return;
-  if (!getCockpitPref()) { b.hidden = true; pill.hidden = false; return; }
+  if (!ck.on) { b.hidden = true; pill.hidden = false; placeCockpit(); return; }
   pill.hidden = true; b.hidden = false;
-  placeCockpit();
+  layoutCockpit();
   if (!cockpit) cockpit = new Cockpit(b.querySelector('.ck-screen'), MAP_STYLE, maplibregl);
   const r = S.routes[S.routeIdx];
   cockpit.setRoute(r?.coords || null);
@@ -1100,16 +1119,75 @@ function closeCockpit(hide = false) {
   const b = $('#cockpit'), pill = $('#cockpit-show');
   if (b) b.hidden = true;
   if (pill) pill.hidden = !(hide && S.nav);
+  document.body.classList.remove('ck-split');
+  if (S.nav?.follow) map.easeTo({ padding: navPadding(), duration: 400 });
 }
-/** Sit just under the direction card. */
+function setCockpitSize(size) {
+  ck.size = size;
+  layoutCockpit();
+  toast(t({ small: 'cockpitSmall', big: 'cockpitBig', split: 'cockpitSplit' }[size]));
+}
+/** Apply the size, place it, and let both maps fit their new boxes. */
+function layoutCockpit() {
+  const b = $('#cockpit');
+  if (!b || b.hidden) return;
+  const size = ck.size;
+  SIZES.forEach((x) => b.classList.toggle(x, x === size));
+  document.body.classList.toggle('ck-split', size === 'split');
+  const next = { small: ['big', EXPAND_SVG], big: ['split', SPLIT_SVG], split: ['small', SHRINK_SVG] }[size];
+  const btn = b.querySelector('[data-ck="size"]');
+  btn.innerHTML = next[1];
+  btn.setAttribute('aria-label', t({ small: 'cockpitSmall', big: 'cockpitBig', split: 'cockpitSplit' }[next[0]]));
+  placeCockpit();
+  requestAnimationFrame(() => {
+    cockpit?.resize();
+    if (S.nav?.follow) map.easeTo({ padding: navPadding(), duration: 400 });
+  });
+}
+/** Small and big sit under the direction card unless the driver dragged it somewhere. */
 function placeCockpit() {
-  const hud = $('#hud');
+  const hud = $('#hud'), b = $('#cockpit'), pill = $('#cockpit-show');
   const top = hud.offsetTop + hud.offsetHeight + 10;
-  for (const el of [$('#cockpit'), $('#cockpit-show')]) if (el) el.style.top = `${top}px`;
+  if (pill) pill.style.top = `${top}px`;
+  if (!b) return;
+  const pos = ck.size === 'small' ? ck.pos : null;
+  if (ck.size === 'split') { b.style.top = ''; b.style.left = ''; return; }
+  if (pos) {
+    const x = Math.max(0, Math.min(innerWidth - b.offsetWidth, pos.x * innerWidth));
+    const y = Math.max(0, Math.min(innerHeight - b.offsetHeight, pos.y * innerHeight));
+    b.style.left = `${x}px`; b.style.top = `${y}px`;
+  } else { b.style.left = ''; b.style.top = `${top}px`; }
+}
+/** Drag the small screen by pressing anywhere on it (not the buttons). */
+function dragCockpit(b) {
+  let start = null;
+  b.addEventListener('pointerdown', (e) => {
+    if (ck.size !== 'small' || e.target.closest('button')) return;
+    const r = b.getBoundingClientRect();
+    start = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId, moved: false };
+    b.setPointerCapture(e.pointerId);
+  });
+  b.addEventListener('pointermove', (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    const x = Math.max(0, Math.min(innerWidth - b.offsetWidth, e.clientX - start.dx));
+    const y = Math.max(0, Math.min(innerHeight - b.offsetHeight, e.clientY - start.dy));
+    start.moved = true;
+    b.classList.add('dragging');
+    b.style.left = `${x}px`; b.style.top = `${y}px`;
+  });
+  const end = (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    if (start.moved) ck.pos = { x: parseFloat(b.style.left) / innerWidth, y: parseFloat(b.style.top) / innerHeight };
+    b.classList.remove('dragging');
+    start = null;
+  };
+  b.addEventListener('pointerup', end);
+  b.addEventListener('pointercancel', end);
+  addEventListener('resize', () => { if (!b.hidden) placeCockpit(); });
 }
 function updateCockpit(step, km, tl) {
   if (!cockpit) return;
-  placeCockpit();
+  if (ck.size !== 'split' && !(ck.size === 'small' && ck.pos)) placeCockpit();
   cockpit.info({
     turnIcon: maneuverIcon(step),
     turnDist: step.type === 'arrive' && km < 0.05 ? t('arrived') : fmtDist(km),
@@ -1312,10 +1390,10 @@ function simFrame(now) {
   sim.at = Math.min(sim.m.total, sim.at + sim.v * dt * sim.mult);
   const p = sim.m.point(sim.at);
   S.me = p;
-  S.nav.heading = turnTowards(S.nav.heading ?? sim.m.bearing(sim.at), sim.m.bearing(sim.at), Math.min(1, dt * 4));
+  S.nav.heading = turnTowards(S.nav.heading ?? sim.m.bearing(sim.at), sim.m.bearing(sim.at), Math.min(1, dt * 4 * Math.max(1, sim.mult / 2))); // faster sims turn faster
   drawMe();
   if (S.nav.follow) map.jumpTo({ center: p, bearing: S.nav.heading, zoom: navZoom(sim.v * 3.6), pitch: navPitch(), padding: navPadding() });
-  cockpit?.follow(p, S.nav.heading);
+  cockpit?.follow(p, S.nav.heading, 0, angleDiff(S.nav.heading, sim.m.bearing(sim.at + 25)));
   // Voice, step changes, hazard warnings and the HUD run on a "GPS fix" about once a second.
   if (now - sim.tick > 1000 / Math.min(sim.mult, 2) || sim.at >= sim.m.total) {
     sim.tick = now;
