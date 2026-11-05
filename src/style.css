@@ -912,3 +912,11 @@ body.navigating .toll-pin:not(.sel) { display: none; }
 .ab-tour { width: 100%; margin: 4px 0 6px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--success); font-weight: 600; }
 .ab-tour svg { width: 18px; height: 18px; }
 @media (prefers-reduced-motion: reduce) { .wl-track { scroll-behavior: auto; } .wl-dots i { transition: none; } }
+
+/* Pins NAVMAP places by itself: official alerts (shield badge) and detected hazards (radar badge). */
+.sys-pin .sys-b { position: absolute; bottom: -5px; right: -5px; width: 16px; height: 16px; border-radius: 50%; background: #1E2A3A; color: #fff; display: grid; place-items: center; box-shadow: 0 0 0 2px #fff; }
+.sys-pin .sys-b svg { width: 10px; height: 10px; }
+.sys-pin.auto { border-style: dashed; }
+.sys-pin.auto .sys-b { background: #1F6FB2; }
+.sys-pin .sys-l { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px; padding: 1px 6px; border-radius: 6px; background: #fff; color: var(--text); font-size: 10px; font-weight: 600; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.maplibregl-popup .pin-auto { display: block; margin-top: 4px; color: var(--text-subtle); }

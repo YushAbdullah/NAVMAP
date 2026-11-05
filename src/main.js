@@ -12,7 +12,8 @@ import { pickTollVias, bestTollRoute } from './lib/tolls.js';
 import { getTransit, clock, delayMin, isWalk, isRail, TZ } from './lib/transit.js';
 import { RIDE_APPS, openRide, gmapsTransit } from './lib/rides.js';
 import { getVehicle, setVehicle, loadFuelPrices, FUEL_DEFAULT, EV_RATE, tollEstimate, fuelEstimate, evEstimate, transitFare, grabFare, rm } from './lib/tripcost.js';
-import { measure, along, pointHazards, routeHaze, routeStates, areaWarnings, hazardCount } from './lib/route-hazards.js';
+import { scanPoints, gridPoints, mergeAuto, statePins } from './lib/auto-hazards.js';
+import { measure, along, samples, pointHazards, routeHaze, routeStates, areaWarnings, hazardCount } from './lib/route-hazards.js';
 import { loadAlerts } from './lib/alerts.js';
 import { alertSummary, alertStates, alertTextHtml, isMarine, tidyTitle, fmtUntil, seaNumbers } from './lib/alert-format.js';
 import { speak, setVoice, voiceOn, voiceSupported, activePack, getVoicePack, setVoicePack, findVoice, voicesLoaded } from './lib/voice.js';
@@ -62,6 +63,8 @@ const S = {
   me: null,                 // [lon, lat]
   nav: null,                // { step, watchId }
   showAlertLayer: true,
+  auto: [],                 // hazards NAVMAP detected by itself (src/lib/auto-hazards.js)
+  autoOn: (() => { try { return localStorage.getItem('navmap.autoHaz') !== '0'; } catch { return true; } })(),
 };
 
 const $ = (s) => document.querySelector(s);
@@ -150,6 +153,8 @@ map.on('load', () => {
     map.on('mouseleave', l, () => { map.getCanvas().style.cursor = ''; });
   }
   drawAlerts();
+  map.on('moveend', () => scheduleScan());
+  scheduleScan(800);
 });
 
 // Gently recolour the base style toward the NAVMAP mint palette.
@@ -402,7 +407,7 @@ function drawReports() {
   }) : [];
 }
 
-function allAlerts() { return [...S.reports, ...S.alerts]; }
+function allAlerts() { return [...S.reports, ...(S.autoOn ? S.auto : []), ...S.alerts]; }
 
 async function drawAlerts() {
   await mapReady;
@@ -411,19 +416,73 @@ async function drawAlerts() {
     for (const a of S.alerts) {
       if (a.lat == null) continue;
       if (a.radiusKm) feats.push({ type: 'Feature', properties: { id: a.id, severity: a.severity }, geometry: { type: 'Polygon', coordinates: [circle(a.lon, a.lat, a.radiusKm)] } });
-      feats.push({ type: 'Feature', properties: { id: a.id, severity: a.severity }, geometry: { type: 'Point', coordinates: [a.lon, a.lat] } });
     }
   }
   map.getSource('alerts')?.setData(fc(feats));
   drawReports();
+  drawSystemPins();
 }
+
+// Pins NAVMAP places by itself: official flood stations and earthquakes, official weather
+// warnings on each state they name, and live hazards it detects (storm, heavy rain, gusts,
+// fog, heat, haze). They look like community pins with a small "auto" badge.
+let systemMarkers = [];
+function systemPins() {
+  if (!S.showAlertLayer) return [];
+  const official = S.alerts.filter((a) => a.lat != null && a.type !== 'clear');
+  return [...official, ...statePins(S.alerts), ...(S.autoOn ? S.auto : [])];
+}
+function drawSystemPins() {
+  systemMarkers.forEach((m) => m.remove());
+  systemMarkers = systemPins().map((a) => {
+    const el = document.createElement('button');
+    el.className = `report-pin sys-pin sev-${a.severity}${a.kind === 'auto' ? ' auto' : ''}${a.statePin ? ' state' : ''}`;
+    el.setAttribute('aria-label', `${L(a, 'title')}${a.place ? ` · ${a.place}` : ''} · ${t(a.kind === 'auto' ? 'autoBadge' : 'officialBadge')}`);
+    el.innerHTML = `${icon(hazIcon(a))}<span class="sys-b" aria-hidden="true">${icon(a.kind === 'auto' ? 'radar' : 'shield')}</span>${a.statePin ? `<span class="sys-l">${esc(a.place)}</span>` : ''}`;
+    el.addEventListener('click', (e) => { e.stopPropagation(); alertPopup(a); });
+    return new maplibregl.Marker({ element: el }).setLngLat([a.lon, a.lat]).addTo(map);
+  });
+}
+
+// ---------------------------------------------------------------- automatic hazard scan
+let autoAbort = null, autoTimer = null;
+async function runAutoScan(points, spacingKm, signal) {
+  if (!S.autoOn || !points.length) return;
+  try {
+    const fresh = await scanPoints(points, spacingKm, { signal });
+    if (signal?.aborted) return;
+    S.auto = mergeAuto(S.auto, fresh);
+    rescanRoutes(); drawSystemPins(); renderBanner();
+    if (S.tab === 'alerts') render();
+  } catch { /* offline or rate limited: keep what we have */ }
+}
+/** Check the area on screen for storms, heavy rain, gusts, fog, heat and haze. */
+function scanView() {
+  if (!S.autoOn || map.getZoom() < 6) return;
+  autoAbort?.abort();
+  autoAbort = new AbortController();
+  const b = map.getBounds();
+  // never smaller than ~30 km across, so a close-up street view still warns about what is nearby
+  const c = map.getCenter(), half = 0.15;
+  const box = [Math.min(b.getWest(), c.lng - half), Math.min(b.getSouth(), c.lat - half), Math.max(b.getEast(), c.lng + half), Math.max(b.getNorth(), c.lat + half)];
+  const spacing = Math.max(5, distKm([box[0], box[1]], [box[2], box[1]]) / 4);
+  runAutoScan(gridPoints(box, 5), spacing, autoAbort.signal);
+}
+function scheduleScan(ms = 1500) { clearTimeout(autoTimer); autoTimer = setTimeout(scanView, ms); }
+/** Check the whole road ahead too, not just what is on screen (a point about every 10 km). */
+function scanAlongRoutes(routes, signal) {
+  const pts = [];
+  for (const r of routes) if (r.m) pts.push(...samples(r.m, Math.min(40, Math.max(2, Math.ceil(r.m.total / 10) + 1))).map((x) => x.p));
+  return runAutoScan(pts, 10, signal);
+}
+setInterval(() => { if (document.visibilityState === 'visible') { scanView(); if (S.routes.length) scanAlongRoutes([S.routes[S.routeIdx]]); } }, 10 * 60e3);
 
 let popup;
 function alertPopup(a) {
   popup?.remove();
   popup = new maplibregl.Popup({ offset: 14, maxWidth: '260px' })
     .setLngLat([a.lon, a.lat])
-    .setHTML(`<b>${esc(L(a, 'title'))}</b>${a.place ? `${esc(a.place)}<br>` : ''}${esc(L(a, 'desc'))}<br><small>${esc(a.source)} · ${esc(fmtAgo(a.time, getLang()))}</small>${a.kind === 'report' ? `<small class="pin-trust">${esc(pinTrust(a, getLang()))}</small>${voteBtns(a)}${talkBtn(a)}` : ''}${a.mine ? `<button class="unpin" data-unpin="${esc(a.pinId)}">${icon('close')}${t('unpin')}</button>` : ''}`)
+    .setHTML(`<b>${esc(L(a, 'title'))}</b>${a.place ? `${esc(a.place)}<br>` : ''}${esc(a.statePin ? alertSummary(L(a, 'desc')) : L(a, 'desc'))}<br>${a.kind === 'auto' ? `<small class="pin-auto">${esc(t('autoNote'))}</small>` : a.kind !== 'report' ? `<small class="pin-auto">${esc(t('officialNote'))}</small>` : ''}<small>${esc(a.source)} · ${esc(fmtAgo(a.time, getLang()))}</small>${a.kind === 'report' ? `<small class="pin-trust">${esc(pinTrust(a, getLang()))}</small>${voteBtns(a)}${talkBtn(a)}` : ''}${a.mine ? `<button class="unpin" data-unpin="${esc(a.pinId)}">${icon('close')}${t('unpin')}</button>` : ''}`)
     .addTo(map);
 }
 
@@ -746,6 +805,7 @@ function labelRoutes(routes) {
 /** Haze and state weather warnings need network lookups, so they arrive a moment after the route. */
 async function checkRouteArea(routes, signal) {
   routes.forEach((r) => { r.areaStatus = 'loading'; });
+  scanAlongRoutes(routes, signal);
   await Promise.all(routes.map(async (r) => {
     const [haze, states] = await Promise.all([
       routeHaze(r.m, signal).catch(() => null),
@@ -767,7 +827,7 @@ function rescanRoutes() {
   if (S.tab === 'drive' && !S.ptEdit) render();
 }
 
-const hazIcon = (a) => a.icon || (a.kind === 'flood' ? 'flood' : a.kind === 'weather' ? 'storm' : 'accident');
+const hazIcon = (a) => a.icon || (a.kind === 'flood' ? 'flood' : a.kind === 'weather' ? 'storm' : a.kind === 'quake' ? 'quake' : 'accident');
 const sevCls = (s) => (s === 'danger' ? 'danger' : s === 'warning' ? 'warn' : 'info');
 
 function hazardRows(r) {
@@ -1189,7 +1249,7 @@ function renderBanner() {
   if (b.hidden !== wasHidden) renderNewsBar();
   if (b.hidden) { syncLayout(); return; }
   b.classList.toggle('warn', n.a.severity !== 'danger');
-  $('#banner-title').textContent = `${L(n.a, 'title')}${S.alertMode === 'sample' && n.a.kind !== 'report' ? ' · SAMPLE' : ''}`;
+  $('#banner-title').textContent = `${L(n.a, 'title')}${S.alertMode === 'sample' && n.a.kind !== 'report' && n.a.kind !== 'auto' ? ' · SAMPLE' : ''}`;
   $('#banner-sub').textContent = [n.a.place || L(n.a, 'desc'), n.d != null ? `${fmtDist(n.d)} ${t('away')}` : ''].filter(Boolean).join(' · ');
   b.onclick = () => {
     if (n.a.lat != null) { map.flyTo({ center: [n.a.lon, n.a.lat], zoom: 13, padding: mapPadding() }); alertPopup(n.a); }
@@ -1771,7 +1831,7 @@ async function unpin(pinId) {
 function viewAlerts() {
   const lang = getLang();
   const ref = origin();
-  const kinds = [['all', 'all'], ['flood', 'flood'], ['weather', 'weather'], ['quake', 'quake'], ['report', 'reports']];
+  const kinds = [['all', 'all'], ['auto', 'autoTab'], ['flood', 'flood'], ['weather', 'weather'], ['quake', 'quake'], ['report', 'reports']];
   const list = allAlerts().filter((a) => S.alertFilter === 'all' || a.kind === S.alertFilter);
   const filters = `<div class="filters" role="group">${kinds.map(([k, label]) => {
     const n = allAlerts().filter((a) => k === 'all' || a.kind === k).length;
@@ -1790,7 +1850,7 @@ function viewAlerts() {
 // and the full official text folded behind "Show details".
 function alertCard(a, ref, lang) {
   const d = a.lat != null ? distKm(ref, [a.lon, a.lat]) : null;
-  const ic = a.kind === 'report' ? (a.icon || 'report') : a.kind;
+  const ic = a.kind === 'report' ? (a.icon || 'report') : a.icon || a.kind;
   const sev = a.severity === 'danger' ? 'danger' : a.severity === 'warning' ? 'warn' : 'info';
   const sevLabel = t(a.severity === 'danger' ? 'sevDanger' : a.severity === 'warning' ? 'sevWarning' : 'sevInfo');
   const desc = L(a, 'desc') || '';
@@ -2628,6 +2688,7 @@ function toggleLayersPop(open = layersPop.hidden) {
   if (open) {
     $('#lp-alerts').checked = S.showAlertLayer;
     $('#lp-radar').checked = !!S.radar;
+    $('#lp-auto').checked = S.autoOn;
     placeLayersPop();
     layersPop.querySelector('[aria-checked="true"]')?.focus();
   }
@@ -2638,6 +2699,12 @@ layersPop.addEventListener('click', (e) => {
   if (b) setBasemap(b.dataset.basemap);
 });
 $('#lp-alerts').addEventListener('change', (e) => { S.showAlertLayer = e.target.checked; drawAlerts(); });
+$('#lp-auto').addEventListener('change', (e) => {
+  S.autoOn = e.target.checked;
+  try { localStorage.setItem('navmap.autoHaz', S.autoOn ? '1' : '0'); } catch { /* private mode */ }
+  if (S.autoOn) { scanView(); if (S.routes.length) scanAlongRoutes(S.routes); }
+  rescanRoutes(); drawSystemPins(); renderBanner(); render();
+});
 $('#lp-radar').addEventListener('change', (e) => { if (e.target.checked !== !!S.radar) toggleRadar(); });
 document.addEventListener('click', (e) => { if (!layersPop.hidden && !layersPop.contains(e.target)) toggleLayersPop(false); });
 document.addEventListener('keydown', (e) => {
