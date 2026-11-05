@@ -1,0 +1,22 @@
+name: Check routing
+
+# Live check of the routers the app calls from the browser (OSRM for the fastest route and reroutes,
+# Valhalla for toll-free routes). Runs when routing code changes, or by hand.
+on:
+  pull_request:
+    paths:
+      - 'src/lib/routing.js'
+      - 'src/lib/tolls.js'
+      - 'scripts/check-tolls.mjs'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check-tolls.mjs

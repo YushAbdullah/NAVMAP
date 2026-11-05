@@ -18,8 +18,14 @@ for (const [name, from, to] of trips) {
   console.log(`\n== ${name}`);
   const main = await getRoutes(from, to);
   main.forEach((r, i) => console.log(`  route ${i}: ${sum(r)}`));
+  // Toll-free routes come from Valhalla (use_tolls 0), since OSRM can't avoid tolls.
   const free = await getRoutes(from, to, undefined, { noToll: true }).catch((e) => (console.log('  noToll error', e.message), []));
-  free.forEach((r, i) => console.log(`  no-motorway ${i}: ${sum(r)}`));
+  free.forEach((r, i) => console.log(`  toll-free ${i}: ${sum(r)} steps=${r.steps.length} first="${r.steps[1]?.type} ${r.steps[1]?.modifier} ${r.steps[1]?.name}"`));
+  if (!free.length) ok = false;
+  // A reroute from a moving car: start heading north.
+  const re = await getRoutes(from, to, undefined, { single: true, bearing: 0 }).catch((e) => (console.log('  reroute error', e.message), []));
+  console.log(`  reroute with heading: ${re[0] ? sum(re[0]) : 'NONE'}`);
+  if (!re.length) ok = false;
   if (!main.some((r) => r.tolls.length)) {
     const vias = pickTollVias(points, from, to);
     console.log(`  vias: ${JSON.stringify(vias)}`);
