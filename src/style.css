@@ -936,3 +936,26 @@ body.simulating .recentre { bottom: calc(84px + env(safe-area-inset-bottom)); }
 .me.nav-car.drive .car-3d { stroke: none; }
 body.simulating .toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
 .me.nav-car.drive::after { display: none; }
+
+/* ---------------------------------------------------------------- in-car mini screen + toll ahead */
+.hud-toll { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(255,210,63,.16); color: #FFE48A; font-size: 14px; }
+.hud-toll[hidden] { display: none; }
+.hud-toll span { flex: 1; min-width: 0; }
+.hud-toll .tol, .ck-toll b { background: #FFD23F; color: #262828; font-size: 11px; font-weight: 800; letter-spacing: .04em; padding: 2px 6px; border-radius: 5px; }
+.cockpit { position: absolute; z-index: 6; left: 16px; top: 280px; width: min(46vw, 210px); aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: #8CCBF2; border: 3px solid var(--ink); box-shadow: var(--e3); }
+.cockpit[hidden], .cockpit-show[hidden] { display: none; }
+.ck-screen, .ck-map { position: absolute; inset: 0; }
+.ck-dash { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 30%; pointer-events: none; }
+.ck-turn { position: absolute; left: 6px; top: 6px; display: flex; align-items: center; gap: 4px; padding: 3px 8px 3px 3px; border-radius: 9px; background: rgba(38,40,40,.88); color: #fff; font-size: 13px; }
+.ck-turn .ck-ic { width: 26px; height: 26px; border-radius: 7px; background: var(--primary); color: var(--ink); display: grid; place-items: center; }
+.ck-turn .ck-ic svg { width: 18px; height: 18px; stroke-width: 2.4; }
+.ck-toll { position: absolute; right: 6px; top: 6px; display: flex; align-items: center; gap: 4px; padding: 3px 7px 3px 3px; border-radius: 9px; background: rgba(38,40,40,.88); color: #FFE48A; font-size: 12px; font-weight: 600; }
+.ck-toll[hidden] { display: none; }
+.ck-speed { position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%); display: flex; align-items: baseline; gap: 2px; color: #BFF5CB; font-variant-numeric: tabular-nums; }
+.ck-speed b { font-size: 15px; }
+.ck-speed small { font-size: 9px; opacity: .8; }
+.ck-close { position: absolute; right: 4px; bottom: 4px; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(255,255,255,.14); color: #fff; display: grid; place-items: center; z-index: 1; }
+.ck-close svg { width: 14px; height: 14px; }
+.cockpit-show { position: absolute; z-index: 6; left: 16px; top: 280px; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border: 0; border-radius: 9999px; background: var(--ink); color: var(--primary); font-weight: 600; font-size: 13px; box-shadow: var(--e2); }
+.cockpit-show svg { width: 18px; height: 18px; }
+@media (min-width: 900px) { .cockpit, .cockpit-show { left: auto; right: 24px; } .cockpit { width: 300px; } }
