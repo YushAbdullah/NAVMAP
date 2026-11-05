@@ -375,18 +375,65 @@ function tollBar() {
     : S.tollSearch === 'loading' ? `<small><span class="spinner"></span>${t('tollSearching')}</small>` : `<small>${t('tollNone')}</small>`;
   const freeCard = fr
     ? `<b>${fmtDur(fr.duration, lang)}</b><small>${t('tollFree')} · RM0</small>`
-    : `<small>${t('tollNoFree')}</small>`;
+    : S.tollFreeSearch === 'loading' ? `<small><span class="spinner"></span>${t('tollSearching')}</small>` : `<small>${t('tollNoFree')}</small>`;
   return `<div class="toll-bar" role="group" aria-label="${esc(t('tollTitle'))}">
-    <button class="toll-opt" data-action="tolls" data-v="use" aria-pressed="${Boolean(tr) && selToll}"${tr ? '' : ' disabled'}><span>${t('tollUse')}</span>${tollCard}</button>
-    <button class="toll-opt" data-action="tolls" data-v="avoid" aria-pressed="${Boolean(fr) && !selToll}"${fr ? '' : ' disabled'}><span>${t('tollAvoid')}</span>${freeCard}</button></div>`;
+    <button class="toll-opt" data-action="tolls" data-v="use" aria-pressed="${tr ? selToll : !S.avoidTolls}"><span>${t('tollUse')}</span>${tollCard}</button>
+    <button class="toll-opt" data-action="tolls" data-v="avoid" aria-pressed="${fr ? !selToll : S.avoidTolls}"><span>${t('tollAvoid')}</span>${freeCard}</button></div>`;
 }
+/**
+ * The driver's toll setting. It is remembered, picks the matching route now, and is used for every reroute.
+ * While driving it reroutes straight away with the new setting.
+ */
 function setAvoidTolls(on) {
   S.avoidTolls = on;
   S.useTollsPicked = !on;
   try { localStorage.setItem('navmap.avoidTolls', on ? '1' : ''); } catch { /* private mode */ }
+  syncTollBtn();
+  if (S.nav) {
+    toast(on ? t('tollAvoidOn') : t('tollUseOn'));
+    reroute({ manual: true });
+    return;
+  }
   const pick = bestIdx(!on);
   if (pick >= 0) S.routeIdx = pick;
+  else if (on && S.routes.length && !isTransit()) findTollFree();
+  else if (!on && S.tollSearch === 'none') toast(t('tollNone'));
   drawRoutes(); render();
+}
+
+/** "Avoid tolls" picked but no toll-free route is known yet: ask the toll-avoiding router now. */
+async function findTollFree() {
+  const routes = S.routes;
+  const from = S.start ? [S.start.lon, S.start.lat] : origin();
+  if (!S.dest || S.tollFreeSearch === 'loading') return;
+  S.tollFreeSearch = 'loading';
+  render();
+  try {
+    const got = (await getRoutes(from, [S.dest.lon, S.dest.lat], routeAbort?.signal, { noToll: true, single: true }))[0];
+    if (S.routes !== routes) return;
+    if (got && !got.tolls?.length) {
+      got.noToll = true;
+      scanRoute(got);
+      routes.push(got);
+      labelRoutes(routes);
+      if (S.avoidTolls) S.routeIdx = routes.length - 1;
+      drawRoutes();
+      checkRouteArea([got], routeAbort?.signal);
+    } else toast(t('tollNoFree'));
+  } catch (e) {
+    if (e.name !== 'AbortError') toast(t('tollNoFree'));
+  }
+  S.tollFreeSearch = null;
+  if (S.tab === 'drive' && !S.nav) render();
+}
+
+/** The toll switch on the driving card: "Tolls: on" / "No tolls". */
+function syncTollBtn() {
+  const b = $('#hud-toll');
+  if (!b) return;
+  b.setAttribute('aria-pressed', String(S.avoidTolls));
+  b.textContent = S.avoidTolls ? t('tollAvoidShort') : t('tollUseShort');
+  b.hidden = isTransit();
 }
 
 function drawReports() {
@@ -495,8 +542,10 @@ async function drawRoutes() {
     return walk ? [line] : [line, ...[l.coords[0], l.coords[l.coords.length - 1]].map((c) => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } }))];
   }) : [];
   map.getSource('transit')?.setData(fc(legs));
-  const feats = S.routes.map((r, i) => ({ type: 'Feature', properties: { idx: i, sel: i === S.routeIdx }, geometry: { type: 'LineString', coordinates: r.coords } }))
-    .filter((f) => !(sel?.transit && f.properties.sel));
+  // While driving, only the route being followed is drawn (no grey alternatives to confuse), and it turns grey
+  // the moment the car leaves it, until the new route arrives.
+  const feats = S.routes.map((r, i) => ({ type: 'Feature', properties: { idx: i, sel: i === S.routeIdx && !S.nav?.rerouting }, geometry: { type: 'LineString', coordinates: r.coords } }))
+    .filter((f, i) => !(sel?.transit && f.properties.sel) && !(S.nav && i !== S.routeIdx));
   // selected route drawn last
   feats.sort((a, b) => Number(a.properties.sel) - Number(b.properties.sel));
   map.getSource('routes')?.setData(fc(feats));
@@ -635,7 +684,8 @@ async function computeRoute() {
     routes.forEach(scanRoute);
     labelRoutes(routes);
     S.routes = routes;
-    S.routeIdx = S.avoidTolls && !isTransit() ? Math.max(0, routes.findIndex((x) => x.noToll)) : 0;
+    S.routeIdx = S.avoidTolls && !isTransit() ? Math.max(0, bestIdx(false)) : 0;
+    S.tollFreeSearch = null;
     S.routeStatus = 'ok';
     drawRoutes();
     checkRouteArea(routes, routeAbort.signal);
@@ -829,21 +879,93 @@ function clearRoute() {
 }
 
 // ---------------------------------------------------------------- navigation
-const OFF_ROUTE_KM = 0.06;      // > 60 m from the line counts as off route
+const OFF_ROUTE_KM = 0.05;      // > 50 m from the line counts as off route
+const FAR_OFF_KM = 0.2;         // > 200 m off: reroute on the first fix, no need to wait for more
+const BAD_FIX_KM = 0.15;        // fixes worse than 150 m are ignored for off-route checks
 const VOICE_STAGES = [          // [metres before the turn, stage id]
-  [1200, 'far'], [500, 'mid'], [120, 'near'],
+  [2000, 'early'], [1200, 'far'], [500, 'mid'], [120, 'near'],
 ];
+
+/** Steps that only say "keep going" (road changes name, straight on): the HUD and voice skip ahead to the next real turn. */
+const isQuiet = (s) => s.type === 'depart' || s.type === 'new name'
+  || ((s.type === 'continue' || s.type === 'turn') && (!s.modifier || s.modifier === 'straight'));
+/** Index of the next step the driver must act on, from step `i` (always ends at the arrival). */
+function nextTarget(r, i) {
+  let j = Math.max(1, Math.min(i, r.steps.length - 1));
+  while (j < r.steps.length - 1 && isQuiet(r.steps[j])) j++;
+  return j;
+}
+
+/** Fine-grained distances along the route, and where each step starts on it (km), for live guidance. */
+function navMeasure(r) {
+  if (r.nm) return r.nm;
+  const nm = measure(r.coords, 20000);
+  let from = 0;
+  nm.stepKm = r.steps.map((s) => {
+    let best = from, bd = Infinity;
+    for (let i = from; i < nm.pts.length; i++) {
+      const d = distKm(s.location, nm.pts[i]);
+      if (d < bd) { bd = d; best = i; }
+      if (bd < 0.005 && d > 0.5) break; // found it and moved well past
+    }
+    from = best;
+    return nm.km[best];
+  });
+  r.nm = nm;
+  return nm;
+}
+
+/** Snap p onto the route near vertex i: { km along the route, off = km from the line }. */
+function snapAt(nm, i, p) {
+  let best = { km: nm.km[i], off: distKm(p, nm.pts[i]) };
+  for (const [a, b] of [[i - 1, i], [i, i + 1]]) {
+    if (a < 0 || b >= nm.pts.length) continue;
+    const A = nm.pts[a], B = nm.pts[b];
+    const kx = Math.cos(A[1] * Math.PI / 180);
+    const bx = (B[0] - A[0]) * kx, by = B[1] - A[1], px = (p[0] - A[0]) * kx, py = p[1] - A[1];
+    const len2 = bx * bx + by * by;
+    if (!len2) continue;
+    const f = Math.max(0, Math.min(1, (px * bx + py * by) / len2));
+    const off = distKm(p, [A[0] + (B[0] - A[0]) * f, A[1] + by * f]);
+    if (off < best.off) best = { km: nm.km[a] + (nm.km[b] - nm.km[a]) * f, off };
+  }
+  return best;
+}
+
+/**
+ * Where the car is along route r. Searched just behind and ahead of the last known spot first, so a road that
+ * passes close to itself (interchange loops, flyovers) does not make guidance jump; whole route as a fallback.
+ */
+function navProgress(r, p) {
+  const nm = navMeasure(r);
+  const last = S.nav?.km ?? 0;
+  let best = -1, bd = Infinity;
+  for (let i = 0; i < nm.pts.length; i++) {
+    if (nm.km[i] < last - 0.3) continue;
+    if (nm.km[i] > last + 3) break;
+    const d = distKm(p, nm.pts[i]);
+    if (d < bd) { bd = d; best = i; }
+  }
+  if (best < 0 || bd > 0.3) {
+    for (let i = 0; i < nm.pts.length; i++) { const d = distKm(p, nm.pts[i]); if (d < bd) { bd = d; best = i; } }
+  }
+  return snapAt(nm, best, p);
+}
 
 function startNav() {
   const r = S.routes[S.routeIdx];
   if (!r) return;
-  S.nav = { step: 1, watchId: null, said: new Set(), offCount: 0, rerouting: false, alertSaid: new Set() };
+  S.nav = { step: 1, km: 0, watchId: null, said: new Set(), offCount: 0, wrongCount: 0, rerouting: false, lastReroute: 0, alertSaid: new Set() };
   document.body.classList.add('navigating');
   $('#hud').hidden = false;
   syncVoiceBtn();
+  syncTollBtn();
+  drawRoutes();
   // First announcement happens inside the tap, which unlocks speech on iOS.
-  say((p) => `${p.start} ${p.step(r.steps[0])}${p.end || '.'} ${announce(p, r.steps[1], r.steps[0].distance)}`);
-  markSaid(1, r.steps[0].distance);
+  const nm = navMeasure(r);
+  const ti = nextTarget(r, 1);
+  say((p) => `${p.start} ${p.step(r.steps[0])}${p.end || '.'} ${announce(p, r.steps[ti], nm.stepKm[ti] * 1000)}`);
+  markSaid(ti, nm.stepKm[ti] * 1000);
   navAreaWarnings();
   if (navigator.geolocation) {
     S.nav.watchId = navigator.geolocation.watchPosition(onNavPos, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
@@ -873,43 +995,66 @@ function say(fn, opts) {
 /** Hazard title in the language the voice pack reads (BM text for BM and dialects, English otherwise). */
 const sayTitle = (a, pk) => (pk.base === 'bm' && a.title_bm) || a.title || '';
 
+/** Smallest angle between two compass headings, 0..180. */
+const angleDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+
+function followCar(pos) {
+  if (!S.nav.follow) return;
+  const kmh = (pos.coords.speed || 0) * 3.6;
+  map.easeTo({ center: S.me, bearing: S.nav.heading, zoom: kmh > 80 ? 16 : kmh > 40 ? 16.8 : 17.5, padding: navPadding(), duration: 900 });
+}
+
 function onNavPos(pos) {
   const r = S.routes[S.routeIdx];
-  if (!r || !S.nav || S.nav.rerouting) return;
+  if (!r || !S.nav) return;
   const prev = S.me;
   S.me = [pos.coords.longitude, pos.coords.latitude];
   S.nav.heading = carHeading(pos, prev, r);
+  const speed = pos.coords.speed || 0;
+  S.nav.moving = speed > 3 || Boolean(prev && distKm(prev, S.me) > 0.01);
   drawMe(true);
-  const lang = getLang();
+  // While a new route is on its way the car keeps moving on the map; guidance waits for the new line.
+  if (S.nav.rerouting) { followCar(pos); return; }
 
-  // Off route? Three bad fixes in a row (ignoring very inaccurate fixes) triggers a reroute.
-  const near = r.coords.slice(Math.max(0, nearestIdx(r, S.me) - 30), nearestIdx(r, S.me) + 30);
-  const off = distToLineKm(S.me, near.length > 1 ? near : r.coords) > Math.max(OFF_ROUTE_KM, (pos.coords.accuracy || 0) / 1000);
-  S.nav.offCount = off ? S.nav.offCount + 1 : 0;
-  if (S.nav.offCount >= 3) { reroute(); return; }
+  // Off route? Two bad fixes in a row (one if far off) start a reroute. Very inaccurate fixes don't count either way.
+  const acc = (pos.coords.accuracy || 0) / 1000;
+  const at = navProgress(r, S.me);
+  if (acc <= BAD_FIX_KM) {
+    const off = at.off > Math.max(OFF_ROUTE_KM, acc);
+    S.nav.offCount = off ? S.nav.offCount + 1 : 0;
+    // Driving the wrong way along the line (e.g. took the opposite carriageway) also needs a new route.
+    const wrong = !off && speed > 5 && angleDiff(S.nav.heading, routeBearing(r, S.me)) > 135;
+    S.nav.wrongCount = wrong ? S.nav.wrongCount + 1 : 0;
+    if (S.nav.offCount >= 2 || (off && at.off > FAR_OFF_KM) || S.nav.wrongCount >= 4) { reroute(); followCar(pos); return; }
+  }
+  if (at.off < 0.1) S.nav.km = at.km;
 
-  // Advance past steps we've reached.
-  while (S.nav.step < r.steps.length - 1 && distKm(S.me, r.steps[S.nav.step].location) < 0.03) S.nav.step++;
-  const step = r.steps[S.nav.step];
-  const m = distKm(S.me, step.location) * 1000;
+  // Advance past steps we've reached, by distance along the road (works even when GPS misses the corner).
+  const nm = navMeasure(r);
+  while (S.nav.step < r.steps.length - 1 && (nm.stepKm[S.nav.step] <= S.nav.km + 0.015 || distKm(S.me, r.steps[S.nav.step].location) < 0.03)) S.nav.step++;
+  const ti = nextTarget(r, S.nav.step);
+  const step = r.steps[ti];
+  const m = Math.max(0, (nm.stepKm[ti] - S.nav.km) * 1000);
 
-  // Voice prompts at 1.2 km, 500 m and ~120 m before each turn, and on arrival.
+  // Voice prompts before each turn (2 km on fast roads, 1.2 km, 500 m, ~120 m) and on arrival.
   if (step.type === 'arrive' && m < 40) {
     if (!S.nav.said.has('arrived')) { S.nav.said.add('arrived'); say((p) => p.arrived); }
   } else {
+    const fast = speed * 3.6 > 70;
     // closest stage first, so entering a short step speaks once, not twice
     for (const [limit, id] of [...VOICE_STAGES].reverse()) {
-      const key = `${S.nav.step}:${id}`;
+      if (id === 'early' && !fast) continue;
+      const key = `${ti}:${id}`;
       if (m > limit) continue;
       if (!S.nav.said.has(key)) {
-        VOICE_STAGES.forEach(([l, other]) => { if (l >= limit) S.nav.said.add(`${S.nav.step}:${other}`); });
+        markSaid(ti, limit);
         say((p) => (id === 'near' ? p.step(step) : announce(p, step, m)));
       }
       break;
     }
   }
 
-  // Hazards ahead on the route: a heads-up at about 3 km and again just before it.
+  // Hazards ahead on the route: a heads-up at about 3 km and again just before it. Queued, so they never cut off a turn.
   const me = r.m ? along(r.m, S.me).km : 0;
   for (const { a, km } of r.hits || []) {
     const ahead = km - me;
@@ -919,20 +1064,17 @@ function onNavPos(pos) {
     if (ahead > 0.6 + reach) {
       if (S.nav.alertSaid.has(`${a.id}:far`)) continue;
       S.nav.alertSaid.add(`${a.id}:far`);
-      say((p, pk) => p.hazFar(sayTitle(a, pk), p.dist(ahead * 1000)));
+      say((p, pk) => p.hazFar(sayTitle(a, pk), p.dist(ahead * 1000)), { queue: true });
     } else {
       if (S.nav.alertSaid.has(`${a.id}:near`)) continue;
       S.nav.alertSaid.add(`${a.id}:near`); S.nav.alertSaid.add(`${a.id}:far`);
-      say((p, pk) => p.hazNear(sayTitle(a, pk), S.mode === 'moto'));
+      say((p, pk) => p.hazNear(sayTitle(a, pk), S.mode === 'moto'), { queue: true });
     }
     toast(`${title}${a.place ? ` · ${a.place}` : ''}`);
   }
 
   // Follow the car, heading up, zooming out a little at highway speed. A drag on the map pauses this.
-  if (S.nav.follow) {
-    const kmh = (pos.coords.speed || 0) * 3.6;
-    map.easeTo({ center: S.me, bearing: S.nav.heading, zoom: kmh > 80 ? 16 : kmh > 40 ? 16.8 : 17.5, padding: navPadding(), duration: 900 });
-  }
+  followCar(pos);
   updateHud();
 }
 
@@ -951,40 +1093,80 @@ function nearestIdx(r, p) {
   return best;
 }
 
-async function reroute() {
-  if (!S.nav || !S.dest || !S.me) return;
+/**
+ * A new route from `from` to the destination that follows the driver's toll setting: toll-free from the
+ * toll-avoiding router when "Avoid tolls" is on (falling back to the normal router), else the fastest.
+ * `bearing` starts it in the direction the car is moving.
+ */
+async function navRoute(from, bearing) {
+  const to = [S.dest.lon, S.dest.lat];
+  const tryGet = async (opts) => {
+    try { return (await getRoutes(from, to, undefined, { single: true, timeoutMs: 10000, bearing, ...opts }))[0]; } catch (e) {
+      if (bearing == null) throw e;
+      return (await getRoutes(from, to, undefined, { single: true, timeoutMs: 10000, ...opts }))[0]; // no road that way: let the router choose
+    }
+  };
+  if (S.avoidTolls) {
+    try { const r = await tryGet({ noToll: true }); if (r) { r.noToll = !r.tolls?.length; return r; } } catch { /* use the normal router */ }
+  }
+  return tryGet({});
+}
+
+async function reroute({ manual = false } = {}) {
+  if (!S.nav || !S.dest || !S.me || S.nav.rerouting) return;
+  if (!manual && Date.now() - S.nav.lastReroute < 6000) return; // after a failure, try again at most every 6 s
   S.nav.rerouting = true;
-  const lang = getLang();
-  say((p) => p.reroute);
-  $('#hud-text').textContent = lang === 'bm' ? 'Mengira semula laluan…' : 'Rerouting…';
+  S.nav.lastReroute = Date.now();
+  if (!manual) say((p) => p.reroute);
+  drawRoutes(); // old line turns grey so nobody follows it
+  $('#hud-ic').innerHTML = icon('nav');
+  $('#hud-dist').textContent = '';
+  $('#hud-text').textContent = t('rerouting');
+  $('#hud-road').textContent = '';
+  const old = S.routes[S.routeIdx];
   try {
-    const keepOff = Boolean(S.routes[S.routeIdx]?.noToll);
-    const routes = await getRoutes(S.me, [S.dest.lon, S.dest.lat], undefined, { noToll: keepOff }).catch(() => getRoutes(S.me, [S.dest.lon, S.dest.lat]));
+    const r = await navRoute(S.me, S.nav.moving ? S.nav.heading : undefined);
     if (!S.nav) return;
-    const old = S.routes[S.routeIdx];
-    routes.forEach((x) => { x.noToll = keepOff && !x.tolls?.length; });
-    routes.forEach((x) => { x.states = old?.states; x.haze = old?.haze; scanRoute(x); x.label = 'fastest'; });
-    S.routes = [routes[0]]; S.routeIdx = 0;
-    S.nav.step = 1; S.nav.said = new Set(); S.nav.offCount = 0;
+    if (!r) throw new Error('No route');
+    r.label = 'fastest'; r.states = old?.states; r.haze = old?.haze;
+    scanRoute(r);
+    S.routes = [r]; S.routeIdx = 0;
+    Object.assign(S.nav, { step: 1, km: 0, said: new Set(), offCount: 0, wrongCount: 0, rerouting: false });
     drawRoutes();
-    say((p) => announce(p, routes[0].steps[1], routes[0].steps[0].distance));
-    markSaid(1, routes[0].steps[0].distance);
-  } catch { /* keep the old route, try again on the next bad fixes */ }
-  if (S.nav) { S.nav.rerouting = false; S.nav.offCount = 0; updateHud(); }
+    const nm = navMeasure(r);
+    const ti = nextTarget(r, 1);
+    say((p) => announce(p, r.steps[ti], nm.stepKm[ti] * 1000));
+    markSaid(ti, nm.stepKm[ti] * 1000);
+    toast(`${t('routeNew')} · ${fmtDur(r.duration, getLang())}${r.via ? ` · ${r.via}` : ''}${tollTag(r)}`);
+  } catch {
+    // Keep the old route for now; the next bad fixes try again.
+    if (S.nav) toast(t('rerouteFailed'));
+  }
+  if (S.nav) { S.nav.rerouting = false; S.nav.offCount = 0; drawRoutes(); updateHud(); }
 }
 
 function updateHud() {
   const r = S.routes[S.routeIdx];
-  const s = r.steps[Math.min(S.nav.step, r.steps.length - 1)];
-  const d = S.me ? distKm(S.me, s.location) : s.distance / 1000;
+  if (!r || !S.nav) return;
+  const nm = navMeasure(r);
+  const ti = nextTarget(r, S.nav.step);
+  const s = r.steps[ti];
+  const d = Math.max(0, nm.stepKm[ti] - S.nav.km);
+  const lang = getLang();
   $('#hud-ic').innerHTML = maneuverIcon(s);
   $('#hud-dist').textContent = s.type === 'arrive' && d < 0.05 ? t('arrived') : fmtDist(d);
-  $('#hud-text').textContent = stepText(s, getLang());
+  $('#hud-text').textContent = stepText(s, lang);
+  // Under the main instruction: the road you're on, and the turn after this one so it never comes as a surprise.
   const current = r.steps[Math.max(0, S.nav.step - 1)]?.name;
-  $('#hud-road').textContent = current ? `${getLang() === 'bm' ? 'Kini di' : 'On'} ${current}` : '';
-  const remain = r.steps.slice(S.nav.step).reduce((acc, x) => ({ d: acc.d + x.distance, t: acc.t + x.duration }), { d: 0, t: 0 });
-  const eta = new Date(Date.now() + remain.t * 1000).toLocaleTimeString(getLang() === 'bm' ? 'ms-MY' : 'en-MY', { hour: 'numeric', minute: '2-digit' });
-  $('#hud-eta').textContent = `${fmtDur(remain.t, getLang())} · ${fmtDist(remain.d / 1000)} · ETA ${eta}`;
+  const after = ti < r.steps.length - 1 ? r.steps[nextTarget(r, ti + 1)] : null;
+  const bits = [];
+  if (current) bits.push(`${t('onRoad')} ${current}`);
+  if (after) bits.push(`${t('thenStep')}: ${stepText(after, lang)}`);
+  $('#hud-road').textContent = bits.join(' · ');
+  const remainKm = Math.max(0, nm.total - S.nav.km);
+  const remainT = nm.total ? r.duration * (remainKm / nm.total) : 0;
+  const eta = new Date(Date.now() + remainT * 1000).toLocaleTimeString(lang === 'bm' ? 'ms-MY' : 'en-MY', { hour: 'numeric', minute: '2-digit' });
+  $('#hud-eta').textContent = `${fmtDur(remainT, lang)} · ${fmtDist(remainKm)} · ETA ${eta}`;
   const hz = nextHazard(r), box = $('#hud-haz');
   box.hidden = !hz || hz.ahead > 10;
   if (!box.hidden) {
@@ -1132,6 +1314,7 @@ function stopNav() {
   $('#hud').hidden = true;
   recentreBtn().hidden = true;
   drawMe();
+  drawRoutes();
   map.easeTo({ pitch: isPlay() ? PLAY_PITCH : 0, bearing: 0, duration: 600 });
 }
 
@@ -2536,16 +2719,18 @@ new ResizeObserver(() => map.resize()).observe($('#map'));
 window.visualViewport?.addEventListener('resize', () => map.resize());
 $('#locate-btn').addEventListener('click', () => locate());
 $('#hud-stop').addEventListener('click', stopNav);
+$('#hud-toll').addEventListener('click', () => setAvoidTolls(!S.avoidTolls));
 $('#hud-voice').addEventListener('click', () => {
   setVoice(!voiceOn());
   syncVoiceBtn();
-  if (voiceOn() && S.nav) say((p) => p.step(S.routes[S.routeIdx].steps[S.nav.step]));
+  const r = S.routes[S.routeIdx];
+  if (voiceOn() && S.nav && r) say((p) => p.step(r.steps[nextTarget(r, S.nav.step)]));
 });
 $('#lang-btn').addEventListener('click', () => {
   setLang(getLang() === 'en' ? 'bm' : 'en');
   $('#lang-btn').textContent = getLang() === 'en' ? 'BM' : 'EN';
   renderChips(); renderBanner(); render(); renderReportGrid(); renderWxFab(); renderAqFab(); renderScore();
-  if (S.nav) updateHud();
+  if (S.nav) { updateHud(); syncTollBtn(); }
 });
 // ---------------------------------------------------------------- map layers menu
 // Base map: the OpenFreeMap street map, or the Play view. (Satellite was removed on
