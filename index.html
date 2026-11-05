@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#F6FEF6">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Font loads without blocking the first paint (system font shows until it arrives) -->
@@ -25,7 +25,7 @@
     <!-- Top: search, chips, then one banner (an alert near you, otherwise a news headline) -->
     <div class="top">
       <form class="search" id="search-form" role="search" autocomplete="off">
-        <span class="brand" aria-hidden="true"><i></i><i></i></span>
+        <svg class="brand" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" fill="#003503"/><path d="M256 92c-75 0-136 59-136 133 0 98 136 199 136 199s136-101 136-199c0-74-61-133-136-133z" fill="#6BE683"/><path d="M256 150l58 128-58-30-58 30z" fill="#003503"/></svg>
         <label for="q" class="sr-only" data-i18n="searchLabel">Search places</label>
         <input id="q" type="search" data-i18n-ph="searchPh" placeholder="Search places, address, EV…" enterkeyhint="search">
         <button type="button" class="icon-btn" id="lang-btn" aria-label="Switch language">BM</button>
