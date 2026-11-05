@@ -912,3 +912,27 @@ body.navigating .toll-pin:not(.sel) { display: none; }
 .ab-tour { width: 100%; margin: 4px 0 6px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--success); font-weight: 600; }
 .ab-tour svg { width: 18px; height: 18px; }
 @media (prefers-reduced-motion: reduce) { .wl-track { scroll-behavior: auto; } .wl-dots i { transition: none; } }
+
+/* ---------------------------------------------------------------- 3D drive view + route simulator */
+.me.nav-car.drive { width: 64px; height: 52px; }
+.me.nav-car.drive .car-3d { width: 64px; height: 52px; display: block; filter: drop-shadow(0 6px 5px rgba(0,25,10,.35)); }
+.hud-meta #hud-eta { flex: 1; min-width: 0; }
+.hud-view { width: 44px; height: 44px; margin-right: 8px; border: 0; border-radius: 12px; background: rgba(255,255,255,0.12); color: #fff; display: grid; place-items: center; flex-shrink: 0; }
+.hud-view[aria-pressed="false"] { opacity: .75; }
+.hud-view[aria-pressed="true"] { background: rgba(107,230,131,.22); color: var(--primary); }
+.sim-start { margin-top: 8px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.sim-bar { position: absolute; z-index: 7; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 9999px; background: var(--ink); color: #fff; box-shadow: var(--e3); overflow: hidden; max-width: calc(100vw - 32px); }
+.sim-bar[hidden] { display: none; }
+.sim-tag { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--primary); }
+.sim-speedo { display: flex; align-items: baseline; gap: 3px; min-width: 64px; justify-content: center; }
+.sim-speedo b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.sim-speedo small { font-size: 11px; opacity: .75; }
+.sim-btn { width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(255,255,255,.12); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+.sim-btn svg { width: 20px; height: 20px; }
+.sim-btn[data-sim="play"] { background: var(--primary); color: var(--ink); }
+.sim-prog { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--primary); transition: width .4s linear; }
+body.simulating .sos-fab { bottom: calc(88px + env(safe-area-inset-bottom)); }
+body.simulating .recentre { bottom: calc(84px + env(safe-area-inset-bottom)); }
+.me.nav-car.drive .car-3d { stroke: none; }
+body.simulating .toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
+.me.nav-car.drive::after { display: none; }
