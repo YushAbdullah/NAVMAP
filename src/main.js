@@ -22,6 +22,8 @@ import { listPins, addPin, removePin, votePin, getThread, postComment, reactComm
 import { TAGS, DISCUSS_TAGS, TAG_BY_ID, MAX_TEXT, cleanName } from './lib/community.js';
 import * as auth from './lib/auth.js';
 import { applyPlay, PLAY_PITCH } from './lib/play.js';
+import { Cockpit, SIZES } from './lib/cockpit.js';
+import { applyDriveView, getDriveView, setDriveView, measureRoute, turnTowards, DRIVE_PITCH, FLAT_PITCH, DRIVE_ZOOM, CAR_SVG, SIM_SPEEDS } from './lib/driveview.js';
 import { award, getScore, levelOf, LEVEL_PTS, BADGES } from './lib/score.js';
 import * as pinsMod from './lib/pins.js';
 import { getSaved, setSaved, savedKindAt, SAVED_KINDS } from './lib/saved.js';
@@ -242,9 +244,12 @@ function drawMe(glide = false) {
   const car = Boolean(S.nav) && !isPlay();
   el.classList.toggle('nav-car', car);
   meMarker.setRotationAlignment(S.nav ? 'map' : 'auto');
-  meMarker.setPitchAlignment(car ? 'map' : 'auto');
-  if (car && !el.querySelector('.car-arrow')) el.innerHTML = '<svg class="car-arrow" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 4 33 34 20 27 7 34z"/></svg>';
-  if (!car && el.querySelector('.car-arrow')) el.innerHTML = '';
+  meMarker.setPitchAlignment(!car ? 'auto' : driveOn() ? 'viewport' : 'map'); // the 3D car stands up, the arrow lies flat
+  // In the 3D drive view the arrow becomes a little car lying on the road.
+  const kind = !car ? '' : driveOn() ? 'car-3d' : 'car-arrow';
+  el.classList.toggle('drive', kind === 'car-3d');
+  if (kind && !el.querySelector(`.${kind}`)) el.innerHTML = kind === 'car-3d' ? CAR_SVG : '<svg class="car-arrow" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 4 33 34 20 27 7 34z"/></svg>';
+  if (!kind && el.querySelector('svg')) el.innerHTML = '';
   meMarker.setRotation(S.nav ? S.nav.heading || 0 : 0);
   if (glide) glideMarker(meMarker, S.me); else meMarker.setLngLat(S.me);
 }
@@ -285,8 +290,17 @@ function carHeading(pos, prev, r) {
 /** Keep the car in the lower part of the screen, under the direction card, so more road ahead shows. */
 function navPadding() {
   const hud = $('#hud')?.offsetHeight || 160;
-  return { top: hud + Math.round(innerHeight * 0.28), bottom: 40, left: 40, right: 40 };
+  // Chase camera: the car sits low on the screen, with the road and skyline opening up ahead.
+  const k = driveOn() ? 0.4 : 0.28;
+  // Split screen: the in-car view fills the bottom half, so the map's car sits just above it.
+  const split = document.body.classList.contains('ck-split') ? ($('#cockpit')?.offsetHeight || 0) : 0;
+  if (split) return { top: hud + 20, bottom: split + 40, left: 40, right: 40 };
+  return { top: Math.min(innerHeight - 160, hud + Math.round(innerHeight * k)), bottom: 40, left: 40, right: 40 };
 }
+/** The 3D drive view is on while navigating (or simulating) and the driver has not switched it off. */
+const driveOn = () => Boolean(S.nav) && S.driveView;
+const navPitch = () => (driveOn() ? DRIVE_PITCH : isPlay() ? PLAY_PITCH : FLAT_PITCH);
+const navZoom = (kmh = 0) => (driveOn() ? DRIVE_ZOOM - (kmh > 80 ? 1.2 : kmh > 40 ? 0.6 : 0) : kmh > 80 ? 16 : kmh > 40 ? 16.8 : 17.5);
 
 /** Car or motorcycle: also ask for a route that avoids toll roads, and offer it as a choice. */
 async function withNoToll(from, to, signal) {
@@ -510,6 +524,8 @@ function origin() { return S.me || center(); }
 let locating = null;
 let refineWatch = null;
 function setMe(pos, fly) {
+  // While simulating, the car on screen is the simulated one; keep the real fix for afterwards.
+  if (S.nav?.sim) { S.nav.realMe = [pos.coords.longitude, pos.coords.latitude]; return; }
   const first = !S.me;
   S.me = [pos.coords.longitude, pos.coords.latitude];
   drawMe();
@@ -834,25 +850,32 @@ const VOICE_STAGES = [          // [metres before the turn, stage id]
   [1200, 'far'], [500, 'mid'], [120, 'near'],
 ];
 
-function startNav() {
+function startNav({ sim = false } = {}) {
   const r = S.routes[S.routeIdx];
   if (!r) return;
-  S.nav = { step: 1, watchId: null, said: new Set(), offCount: 0, rerouting: false, alertSaid: new Set() };
+  S.nav = { step: 1, watchId: null, said: new Set(), offCount: 0, rerouting: false, alertSaid: new Set(), sim: sim ? newSim(r) : null };
+  if (sim) { S.nav.realMe = S.me; S.me = r.coords[0]; }
   document.body.classList.add('navigating');
+  document.body.classList.toggle('simulating', sim);
+  applyDriveView(map, driveOn(), { play: isPlay() });
+  syncViewBtn();
   $('#hud').hidden = false;
+  setHudMin(hudMinPref(), false);
+  openCockpit();
   syncVoiceBtn();
   // First announcement happens inside the tap, which unlocks speech on iOS.
   say((p) => `${p.start} ${p.step(r.steps[0])}${p.end || '.'} ${announce(p, r.steps[1], r.steps[0].distance)}`);
   markSaid(1, r.steps[0].distance);
   navAreaWarnings();
-  if (navigator.geolocation) {
+  if (navigator.geolocation && !sim) {
     S.nav.watchId = navigator.geolocation.watchPosition(onNavPos, () => {}, { enableHighAccuracy: true, maximumAge: 1000 });
   }
   S.nav.follow = true;
   S.nav.heading = routeBearing(r, S.me || r.coords[0]);
   drawMe();
-  map.easeTo({ center: S.me || r.coords[0], zoom: 17.5, bearing: S.nav.heading, pitch: isPlay() ? PLAY_PITCH : 55, padding: navPadding(), duration: 900 });
+  map.easeTo({ center: S.me || r.coords[0], zoom: navZoom(), bearing: S.nav.heading, pitch: navPitch(), padding: navPadding(), duration: 900 });
   updateHud();
+  if (sim) { renderSimBar(); setTimeout(() => S.nav?.sim && simPlay(true), 1000); return; }
   const g = award('nav');
   if (isPlay() || g.badges.length) setTimeout(() => celebrate(g), 3400);
 }
@@ -878,8 +901,8 @@ function onNavPos(pos) {
   if (!r || !S.nav || S.nav.rerouting) return;
   const prev = S.me;
   S.me = [pos.coords.longitude, pos.coords.latitude];
-  S.nav.heading = carHeading(pos, prev, r);
-  drawMe(true);
+  // The simulator moves the car and camera every frame itself; here it only runs the voice and HUD logic.
+  if (!S.nav.sim) { S.nav.heading = carHeading(pos, prev, r); drawMe(true); }
   const lang = getLang();
 
   // Off route? Three bad fixes in a row (ignoring very inaccurate fixes) triggers a reroute.
@@ -927,12 +950,14 @@ function onNavPos(pos) {
     }
     toast(`${title}${a.place ? ` · ${a.place}` : ''}`);
   }
+  tollAlerts(r, me);
 
   // Follow the car, heading up, zooming out a little at highway speed. A drag on the map pauses this.
-  if (S.nav.follow) {
+  if (S.nav.follow && !S.nav.sim) {
     const kmh = (pos.coords.speed || 0) * 3.6;
-    map.easeTo({ center: S.me, bearing: S.nav.heading, zoom: kmh > 80 ? 16 : kmh > 40 ? 16.8 : 17.5, padding: navPadding(), duration: 900 });
+    map.easeTo({ center: S.me, bearing: S.nav.heading, zoom: navZoom(kmh), pitch: navPitch(), padding: navPadding(), duration: 900 });
   }
+  if (!S.nav.sim) { S.nav.kmh = (pos.coords.speed || 0) * 3.6; cockpit?.follow(S.me, S.nav.heading, 900, angleDiff(S.nav.heading, routeBearing(r, S.me))); }
   updateHud();
 }
 
@@ -966,7 +991,9 @@ async function reroute() {
     routes.forEach((x) => { x.states = old?.states; x.haze = old?.haze; scanRoute(x); x.label = 'fastest'; });
     S.routes = [routes[0]]; S.routeIdx = 0;
     S.nav.step = 1; S.nav.said = new Set(); S.nav.offCount = 0;
+    if (S.nav.sim) S.nav.sim = { ...newSim(routes[0]), on: S.nav.sim.on, mult: S.nav.sim.mult };
     drawRoutes();
+    cockpit?.setRoute(routes[0].coords);
     say((p) => announce(p, routes[0].steps[1], routes[0].steps[0].distance));
     markSaid(1, routes[0].steps[0].distance);
   } catch { /* keep the old route, try again on the next bad fixes */ }
@@ -991,6 +1018,184 @@ function updateHud() {
     box.className = `hud-haz ${sevCls(hz.a.severity)}`;
     box.innerHTML = `${icon(hazIcon(hz.a))}<span>${esc(L(hz.a, 'title'))}</span><b>${hz.ahead < 0.1 ? t('hazHere') : fmtDist(hz.ahead)}</b>`;
   }
+  // Toll road ahead (or the one you are on), with the estimated charge for that stretch.
+  const tl = nextToll(r), tb = $('#hud-toll');
+  tb.hidden = !tl || tl.ahead > 10;
+  if (!tb.hidden) {
+    const cost = S.mode === 'moto' ? '' : ` · ~${rm(tollEstimate([tl.s], S.mode).rm)}`;
+    tb.innerHTML = `<b class="tol">TOL</b><span>${esc(tl.on ? t('tollOn').replace('{s}', tl.s.name || '') : t('tollAheadShort').replace('{s}', tl.s.name || ''))}${cost}</span><b>${tl.on ? '' : fmtDist(tl.ahead)}</b>`;
+  }
+  updateCockpit(s, d, tl);
+}
+
+/** The toll stretch ahead of the driver, or the one they are on: { s, ahead km, on }. */
+function nextToll(r) {
+  if (!S.me || !r.m || !r.tolls?.length || isTransit()) return null;
+  const me = along(r.m, S.me).km;
+  for (const s of r.tolls) {
+    if (!s.at) continue;
+    const start = along(r.m, s.at).km;
+    if (me < start - 0.03) return { s, ahead: start - me, on: false };
+    if (me <= start + s.km) return { s, ahead: 0, on: true };
+  }
+  return null;
+}
+/** Spoken and shown once at about 2 km before each toll road, and again just before joining it. */
+function tollAlerts(r, me) {
+  if (!r.m || !r.tolls?.length || isTransit()) return;
+  r.tolls.forEach((s, i) => {
+    if (!s.at) return;
+    const ahead = along(r.m, s.at).km - me;
+    if (ahead < 0 || ahead > 2.2) return;
+    const near = ahead < 0.5;
+    const key = `toll${i}:${near ? 'near' : 'far'}`;
+    if (S.nav.alertSaid.has(key)) return;
+    S.nav.alertSaid.add(key); if (near) S.nav.alertSaid.add(`toll${i}:far`);
+    const cost = S.mode === 'moto' ? '' : rm(tollEstimate([s], S.mode).rm);
+    say((p, pk) => {
+      const bm = pk.base === 'bm';
+      const name = `${bm ? 'jalan bertol' : 'toll road'} ${s.name || ''}`.trim();
+      return near ? p.hazFar(name, bm ? 'sejurus lagi' : 'just') : p.hazFar(name, p.dist(ahead * 1000));
+    });
+    toast(`${(near ? t('tollAheadShort') : t('tollAhead')).replace('{s}', s.name || '').replace('{d}', fmtDist(ahead))}${cost ? ` · ~${cost}` : ''}`);
+  });
+}
+
+// ---------------------------------------------------------------- in-car screen
+// Small (drag it anywhere), big, or split screen: the map on top and the driver's view below.
+let cockpit = null;
+const ck = {
+  get on() { try { return localStorage.getItem('navmap.cockpit') !== 'off'; } catch { return true; } },
+  set on(v) { try { localStorage.setItem('navmap.cockpit', v ? 'on' : 'off'); } catch { /* private mode */ } },
+  get size() { try { const v = localStorage.getItem('navmap.cockpitSize'); return SIZES.includes(v) ? v : 'small'; } catch { return 'small'; } },
+  set size(v) { try { localStorage.setItem('navmap.cockpitSize', v); } catch { /* private mode */ } },
+  get pos() { try { return JSON.parse(localStorage.getItem('navmap.cockpitPos') || 'null'); } catch { return null; } },
+  set pos(v) { try { if (v) localStorage.setItem('navmap.cockpitPos', JSON.stringify(v)); else localStorage.removeItem('navmap.cockpitPos'); } catch { /* private mode */ } },
+};
+const angleDiff = (a, b) => ((((b - a) % 360) + 540) % 360) - 180;
+const EXPAND_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>';
+const SPLIT_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16"/></svg>';
+const SHRINK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4l-6 6M14 5v5h5M4 20l6-6M10 19v-5H5"/></svg>';
+
+function cockpitBox() {
+  let b = $('#cockpit');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'cockpit'; b.className = 'cockpit'; b.hidden = true;
+    b.innerHTML = `<div class="ck-screen" role="img"></div>
+      <span class="ck-grip" aria-hidden="true"></span>
+      <div class="ck-btns"><button class="ck-btn" data-ck="size"></button><button class="ck-btn" data-ck="hide">${icon('close')}</button></div>`;
+    const pill = document.createElement('button');
+    pill.id = 'cockpit-show'; pill.className = 'cockpit-show'; pill.hidden = true; pill.dataset.ck = 'show';
+    $('#app').append(b, pill);
+    $('#app').addEventListener('click', (e) => {
+      const a = e.target.closest('[data-ck]')?.dataset.ck;
+      if (!a) return;
+      if (a === 'show') { ck.on = true; openCockpit(); }
+      if (a === 'hide') { ck.on = false; closeCockpit(true); }
+      if (a === 'size') setCockpitSize(SIZES[(SIZES.indexOf(ck.size) + 1) % SIZES.length]);
+    });
+    dragCockpit(b);
+  }
+  return b;
+}
+function openCockpit() {
+  const b = cockpitBox(), pill = $('#cockpit-show');
+  pill.innerHTML = `${icon('car')}<span>${t('cockpitShow')}</span>`;
+  b.querySelector('[data-ck="hide"]').setAttribute('aria-label', t('cockpitHide'));
+  b.querySelector('.ck-screen').setAttribute('aria-label', t('cockpitTitle'));
+  if (!S.nav || isTransit()) return;
+  if (!ck.on) { b.hidden = true; pill.hidden = false; placeCockpit(); return; }
+  pill.hidden = true; b.hidden = false;
+  layoutCockpit();
+  if (!cockpit) cockpit = new Cockpit(b.querySelector('.ck-screen'), MAP_STYLE, maplibregl);
+  const r = S.routes[S.routeIdx];
+  cockpit.setRoute(r?.coords || null);
+  cockpit.follow(S.me || r?.coords[0], S.nav.heading || 0);
+  updateHud();
+}
+/** hide: the driver closed it (keep the "show" pill); otherwise navigation ended. */
+function closeCockpit(hide = false) {
+  cockpit?.destroy(); cockpit = null;
+  const b = $('#cockpit'), pill = $('#cockpit-show');
+  if (b) b.hidden = true;
+  if (pill) pill.hidden = !(hide && S.nav);
+  document.body.classList.remove('ck-split');
+  if (S.nav?.follow) map.easeTo({ padding: navPadding(), duration: 400 });
+}
+function setCockpitSize(size) {
+  ck.size = size;
+  if (size === 'split') setHudMin(true); // two screens: fold the direction card to one line
+  layoutCockpit();
+  toast(t({ small: 'cockpitSmall', big: 'cockpitBig', split: 'cockpitSplit' }[size]));
+}
+/** Apply the size, place it, and let both maps fit their new boxes. */
+function layoutCockpit() {
+  const b = $('#cockpit');
+  if (!b || b.hidden) return;
+  const size = ck.size;
+  SIZES.forEach((x) => b.classList.toggle(x, x === size));
+  document.body.classList.toggle('ck-split', size === 'split');
+  const next = { small: ['big', EXPAND_SVG], big: ['split', SPLIT_SVG], split: ['small', SHRINK_SVG] }[size];
+  const btn = b.querySelector('[data-ck="size"]');
+  btn.innerHTML = next[1];
+  btn.setAttribute('aria-label', t({ small: 'cockpitSmall', big: 'cockpitBig', split: 'cockpitSplit' }[next[0]]));
+  placeCockpit();
+  requestAnimationFrame(() => {
+    cockpit?.resize();
+    if (S.nav?.follow) map.easeTo({ padding: navPadding(), duration: 400 });
+  });
+}
+/** Small and big sit under the direction card unless the driver dragged it somewhere. */
+function placeCockpit() {
+  const hud = $('#hud'), b = $('#cockpit'), pill = $('#cockpit-show');
+  const top = hud.offsetTop + hud.offsetHeight + 10;
+  if (pill) pill.style.top = `${top}px`;
+  if (!b) return;
+  const pos = ck.size === 'small' ? ck.pos : null;
+  if (ck.size === 'split') { b.style.top = ''; b.style.left = ''; return; }
+  if (pos) {
+    const x = Math.max(0, Math.min(innerWidth - b.offsetWidth, pos.x * innerWidth));
+    const y = Math.max(0, Math.min(innerHeight - b.offsetHeight, pos.y * innerHeight));
+    b.style.left = `${x}px`; b.style.top = `${y}px`;
+  } else { b.style.left = ''; b.style.top = `${top}px`; }
+}
+/** Drag the small screen by pressing anywhere on it (not the buttons). */
+function dragCockpit(b) {
+  let start = null;
+  b.addEventListener('pointerdown', (e) => {
+    if (ck.size !== 'small' || e.target.closest('button')) return;
+    const r = b.getBoundingClientRect();
+    start = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId, moved: false };
+    b.setPointerCapture(e.pointerId);
+  });
+  b.addEventListener('pointermove', (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    const x = Math.max(0, Math.min(innerWidth - b.offsetWidth, e.clientX - start.dx));
+    const y = Math.max(0, Math.min(innerHeight - b.offsetHeight, e.clientY - start.dy));
+    start.moved = true;
+    b.classList.add('dragging');
+    b.style.left = `${x}px`; b.style.top = `${y}px`;
+  });
+  const end = (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    if (start.moved) ck.pos = { x: parseFloat(b.style.left) / innerWidth, y: parseFloat(b.style.top) / innerHeight };
+    b.classList.remove('dragging');
+    start = null;
+  };
+  b.addEventListener('pointerup', end);
+  b.addEventListener('pointercancel', end);
+  addEventListener('resize', () => { if (!b.hidden) placeCockpit(); });
+}
+function updateCockpit(step, km, tl) {
+  if (!cockpit) return;
+  if (ck.size !== 'split' && !(ck.size === 'small' && ck.pos)) placeCockpit();
+  cockpit.info({
+    turnIcon: maneuverIcon(step),
+    turnDist: step.type === 'arrive' && km < 0.05 ? t('arrived') : fmtDist(km),
+    toll: tl && !tl.on && tl.ahead <= 5 ? esc(fmtDist(tl.ahead)) : tl?.on ? esc(tl.s.name || '') : '',
+    kmh: S.nav?.sim ? S.nav.sim.v * 3.6 : S.nav?.kmh || 0,
+  });
 }
 
 // ---------------------------------------------------------------- voice picker (dialects, Tamil, Chinese)
@@ -1126,13 +1331,136 @@ function syncVoiceBtn() {
 
 function stopNav() {
   if (S.nav?.watchId != null) navigator.geolocation.clearWatch(S.nav.watchId);
+  if (S.nav?.sim) { cancelAnimationFrame(simRaf); S.me = S.nav.realMe || null; }
+  const wasSim = Boolean(S.nav?.sim);
   S.nav = null;
   if (voiceSupported()) speechSynthesis.cancel();
-  document.body.classList.remove('navigating');
+  document.body.classList.remove('navigating', 'simulating');
   $('#hud').hidden = true;
   recentreBtn().hidden = true;
+  closeCockpit();
+  renderSimBar();
+  applyDriveView(map, false);
+  if (S.me) drawMe(); else if (wasSim && meMarker) { meMarker.remove(); meMarker = null; }
+  map.easeTo({ pitch: isPlay() ? PLAY_PITCH : 0, bearing: 0, zoom: Math.min(map.getZoom(), 16), duration: 600 });
+}
+
+// ---------------------------------------------------------------- direction card: full or one line
+// Folded, it shows only the next turn and distance, leaving more room for the map and the
+// in-car view. Tap the card or the handle to open it again. Remembered on this phone.
+const hudMinPref = () => { try { return localStorage.getItem('navmap.hudMin') === '1'; } catch { return false; } };
+function setHudMin(min, save = true) {
+  if (save) try { localStorage.setItem('navmap.hudMin', min ? '1' : '0'); } catch { /* private mode */ }
+  const hud = $('#hud'), b = $('#hud-min');
+  hud.classList.toggle('min', min);
+  b.setAttribute('aria-expanded', String(!min));
+  b.setAttribute('aria-label', t(min ? 'hudExpand' : 'hudMinimise'));
+  if (!S.nav) return;
+  requestAnimationFrame(() => {
+    placeCockpit();
+    if (S.nav?.follow) map.easeTo({ padding: navPadding(), duration: 400 });
+  });
+}
+$('#hud-min').addEventListener('click', (e) => { e.stopPropagation(); setHudMin(!$('#hud').classList.contains('min')); });
+$('#hud').addEventListener('click', (e) => { if ($('#hud').classList.contains('min') && !e.target.closest('button')) setHudMin(false); });
+
+// ---------------------------------------------------------------- drive view and route simulator
+S.driveView = getDriveView();
+function syncViewBtn() {
+  const b = $('#hud-view');
+  b.setAttribute('aria-pressed', String(S.driveView));
+  b.setAttribute('aria-label', t(S.driveView ? 'viewFlat' : 'view3d'));
+  b.title = t(S.driveView ? 'viewFlat' : 'view3d');
+}
+function toggleDriveView() {
+  S.driveView = !S.driveView;
+  setDriveView(S.driveView);
+  syncViewBtn();
+  if (!S.nav) return;
+  applyDriveView(map, driveOn(), { play: isPlay() });
   drawMe();
-  map.easeTo({ pitch: isPlay() ? PLAY_PITCH : 0, bearing: 0, duration: 600 });
+  if (S.nav.follow) map.easeTo({ center: S.me, bearing: S.nav.heading || 0, zoom: navZoom(), pitch: navPitch(), padding: navPadding(), duration: 700 });
+  toast(t(S.driveView ? 'view3dOn' : 'viewFlatOn'));
+}
+$('#hud-view').addEventListener('click', toggleDriveView);
+
+let simRaf = 0;
+function newSim(r) {
+  return { m: measureRoute(r), at: 0, v: 0, on: false, mult: S.nav?.sim?.mult || 1, last: 0, tick: 0, done: false };
+}
+/** Start or pause the simulated drive. */
+function simPlay(on) {
+  const sim = S.nav?.sim;
+  if (!sim) return;
+  sim.on = on && !sim.done;
+  sim.last = 0;
+  cancelAnimationFrame(simRaf);
+  if (sim.on) simRaf = requestAnimationFrame(simFrame);
+  renderSimBar();
+}
+function simFrame(now) {
+  const sim = S.nav?.sim;
+  if (!sim || !sim.on) return;
+  const dt = sim.last ? Math.min(0.25, (now - sim.last) / 1000) : 0;
+  sim.last = now;
+  // Ease towards the road's speed like a driver would: brisk pick-up, gentler braking into slow roads.
+  const target = sim.m.speed(sim.at);
+  const ahead = sim.m.speed(sim.at + 120); // slow down before a slower stretch
+  const want = Math.min(target, ahead + 4);
+  sim.v += (want - sim.v) * Math.min(1, dt * (want > sim.v ? 0.8 : 1.5));
+  sim.at = Math.min(sim.m.total, sim.at + sim.v * dt * sim.mult);
+  const p = sim.m.point(sim.at);
+  S.me = p;
+  S.nav.heading = turnTowards(S.nav.heading ?? sim.m.bearing(sim.at), sim.m.bearing(sim.at), Math.min(1, dt * 4 * Math.max(1, sim.mult / 2))); // faster sims turn faster
+  drawMe();
+  if (S.nav.follow) map.jumpTo({ center: p, bearing: S.nav.heading, zoom: navZoom(sim.v * 3.6), pitch: navPitch(), padding: navPadding() });
+  cockpit?.follow(p, S.nav.heading, 0, angleDiff(S.nav.heading, sim.m.bearing(sim.at + 25)));
+  // Voice, step changes, hazard warnings and the HUD run on a "GPS fix" about once a second.
+  if (now - sim.tick > 1000 / Math.min(sim.mult, 2) || sim.at >= sim.m.total) {
+    sim.tick = now;
+    onNavPos({ coords: { longitude: p[0], latitude: p[1], speed: sim.v, heading: S.nav.heading, accuracy: 5 } });
+    if (!S.nav?.sim) return; // ended inside
+    renderSimBar();
+  }
+  if (sim.at >= sim.m.total) { sim.done = true; sim.on = false; sim.v = 0; renderSimBar(); return; }
+  simRaf = requestAnimationFrame(simFrame);
+}
+function simBar() {
+  let b = $('#sim-bar');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'sim-bar'; b.className = 'sim-bar'; b.hidden = true;
+    b.setAttribute('role', 'group');
+    $('#app').appendChild(b);
+    b.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-sim]')?.dataset.sim;
+      const sim = S.nav?.sim;
+      if (!a || !sim) return;
+      if (a === 'play') {
+        if (sim.done) { sim.at = 0; sim.v = 0; sim.done = false; S.nav.step = 1; S.nav.said = new Set(); S.nav.alertSaid = new Set(); }
+        simPlay(!sim.on);
+      }
+      if (a === 'speed') { sim.mult = SIM_SPEEDS[(SIM_SPEEDS.indexOf(sim.mult) + 1) % SIM_SPEEDS.length]; renderSimBar(); }
+      if (a === 'end') stopNav();
+    });
+  }
+  return b;
+}
+const PAUSE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';
+const RESTART_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function renderSimBar() {
+  const b = simBar(), sim = S.nav?.sim;
+  b.hidden = !sim;
+  if (!sim) return;
+  b.setAttribute('aria-label', t('simTitle'));
+  const kmh = Math.round(sim.v * 3.6);
+  const pct = Math.round((sim.at / (sim.m.total || 1)) * 100);
+  b.innerHTML = `<span class="sim-tag">${t('simTitle')}</span>
+    <span class="sim-speedo" aria-label="${kmh} km/h"><b>${kmh}</b><small>km/h</small></span>
+    <button class="sim-btn" data-sim="play" aria-label="${esc(t(sim.done ? 'simAgain' : sim.on ? 'simPause' : 'simPlay'))}">${sim.done ? RESTART_SVG : sim.on ? PAUSE_SVG : PLAY_SVG}</button>
+    <button class="sim-btn sim-mult" data-sim="speed" aria-label="${esc(t('simSpeed'))}">${sim.mult}×</button>
+    <button class="sim-btn" data-sim="end" aria-label="${esc(t('simEnd'))}">${icon('close')}</button>
+    <span class="sim-prog" style="width:${pct}%"></span>`;
 }
 
 /** Shown when the driver drags the map during navigation; tap to follow the car again. */
@@ -1150,7 +1478,7 @@ function recentre() {
   if (!S.nav) return;
   S.nav.follow = true;
   recentreBtn().hidden = true;
-  map.easeTo({ center: S.me || map.getCenter(), bearing: S.nav.heading || 0, zoom: 17.5, pitch: isPlay() ? PLAY_PITCH : 55, padding: navPadding(), duration: 700 });
+  map.easeTo({ center: S.me || map.getCenter(), bearing: S.nav.heading || 0, zoom: navZoom(), pitch: navPitch(), padding: navPadding(), duration: 700 });
 }
 
 // ---------------------------------------------------------------- alerts
@@ -1383,9 +1711,11 @@ function viewDrive() {
   const warn = routeHazardsView(r);
   const steps = r.steps.map((s) => `<li class="row"><span class="ic info">${maneuverIcon(s)}</span><span class="mid"><b style="font-size:15px;font-weight:500;white-space:normal">${esc(stepText(s, lang))}</b></span><span class="end"><small style="color:var(--text-subtle)">${s.distance ? fmtDist(s.distance / 1000) : ''}</small></span></li>`).join('');
   // Live turn-by-turn follows GPS, so it needs the route to begin where the user is.
+  // The simulator drives the route on screen from its own start, so it works for any From point.
+  const simBtn = `<button class="btn-ghost sim-start" data-action="sim-nav">${icon('car')}${t('simStart')}</button>`;
   const go = S.start
-    ? `<p class="muted pt-note">${t('previewOnly')}</p><button class="btn-ghost" data-action="pt-reset-start">${icon('nav')}${t('navFromMe')}</button>`
-    : `<button class="btn" data-action="start-nav">${icon('nav')}${t('start')}</button>${voiceChip()}`;
+    ? `<p class="muted pt-note">${t('previewOnly')}</p><button class="btn-ghost" data-action="pt-reset-start">${icon('nav')}${t('navFromMe')}</button>${simBtn}`
+    : `<button class="btn" data-action="start-nav">${icon('nav')}${t('start')}</button>${simBtn}${voiceChip()}`;
   return `${pts}
     <div class="summary"><b>${fmtDur(r.duration, lang)}</b><span>${fmtDist(r.distance / 1000)}${r.via ? ` · ${t('via')} ${esc(r.via)}` : ''}</span></div>
     ${tollBar()}${alts}${warn}
@@ -2453,6 +2783,7 @@ document.addEventListener('click', (e) => {
   if (act === 'pt-swap') swapPoints();
   if (act === 'pt-reset-start') { S.start = null; computeRoute(); }
   if (act === 'start-nav') startNav();
+  if (act === 'sim-nav') startNav({ sim: true });
   if (act === 'mode') setMode(el.dataset.mode);
   if (act === 'tolls') setAvoidTolls(el.dataset.v === 'avoid');
   if (act === 'recentre') recentre();
@@ -2563,6 +2894,7 @@ async function setBasemap(kind) {
   await mapReady;
   const play = kind === 'play';
   if (!play) applyPlay(map, false);
+  if (S.nav) { applyDriveView(map, driveOn(), { play }); drawMe(); }
   if (play) {
     applyPlay(map, true);
     if (!S.nav) map.easeTo({ pitch: PLAY_PITCH, zoom: Math.max(map.getZoom(), 16), duration: 900 });
